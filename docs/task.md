@@ -97,3 +97,28 @@ x=0.83（目标盘中心 x=0.82，正中目标）。启动：
 - `scripts/start_push.sh`：一键启动（端口 8083）
 - `assets/{top_cam,global_cam,top_cam_push,global_cam_push}_224.png`：224×224 相机标定图
 - `assets/push_webviewer.png`：浏览器推物动画截图
+
+
+## 环境接口封装（`envs/push_cube_env.py`）
+
+基于 Gymnasium 基类的标准化环境，把场景封装成 `reset / step / 观测 / 动作` 四要素：
+
+| 要素 | 定义 |
+| --- | --- |
+| 观测 `spaces.Dict` | `image`: Box(224,224,3) uint8，`top_cam` RGB（核心观测）；`state`: Box(13,) float32 = 7 关节角 + 立方体位置(3) + 目标位置(3) |
+| 动作 `Box(4,)` | `[dx,dy,dz,gripper]` 每步增量，平移每步限幅 **±0.02 m**；内部把增量加到 **mocap 目标位置**（并钳位到可达工作空间盒），不碰关节力矩；gripper 0–1 为预留接口 |
+| 奖励 | 稠密 `-‖cube_xy - target_xy‖` + 推到目标盘内（半径 0.06 m）一次性 **+5** |
+| 终止/截断 | `terminated`: 立方体到达目标盘；`truncated`: 默认 100 步（frame_skip=10 → 每步 20 ms） |
+
+用法：
+
+```python
+from envs.push_cube_env import PushCubeEnv
+env = PushCubeEnv()
+obs, info = env.reset(seed=0)
+obs, r, term, trunc, info = env.step(env.action_space.sample())  # 随机交互
+```
+
+验证（`envs/test_env.py`）：50 步随机动作无报错，`image` (224,224,3) uint8、
+`state` (13,) float32；脚本化推动序列下奖励随立方体靠近目标而增大
+（dist 0.216 → 0.112，reward -0.216 → -0.112）。

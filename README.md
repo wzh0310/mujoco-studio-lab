@@ -121,6 +121,7 @@ mujoco-studio --model=assets/scenes/push_cube.xml --gfx=web --port=8082 --hot_re
 目录更新：
 
 ```
+├── envs/push_cube_env.py        # Gymnasium 环境封装（观测/动作/奖励/步进）
 ├── docs/task.md                 # 交互物体与 mocap 驱动说明
 ├── push_sim.py                  # 自动推物 plugin（含 4 维动作接口）
 ├── scripts/start_push.sh        # 一键启动推物 demo
