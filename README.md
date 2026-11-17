@@ -230,7 +230,39 @@ python scripts/verify_dataset.py     # 打印 VERIFY DATASET OK，产出 assets/
 
 ---
 
-## 6. 后续规划（第二周）
+## 6. 自定义环境接入 LeRobot（训练中自动评估）
+
+把第一周的 `PushCubeEnv` 封装为 LeRobot 兼容环境，可被原生加载用于 rollout / 训练中评估。
+
+> **版本说明**：本项目 LeRobot 为 v0.7.0（2026 定制版）。该版本**没有 `BaseEnv` 基类**，环境本体是标准 `gymnasium.Env`；「注册表」实际是 `EnvConfig.register_subclass` + `gym.register`。实现按真实 API 落地。
+
+**封装内容**（`envs/lerobot_push_cube_env.py`）：
+- `PushCubeEnvWrapper`（继承 `gym.Env`）实现四方法：`reset()` / `step(action)` / `render()` / `close()`。
+- **观测键与数据集 100% 对齐**：`observation.images.main`（uint8 224×224×3）、`observation.state`（float32 13）；由 `canonical_observation` 把底层的 `pixels` / `agent_pos` 映射而来。
+- **动作反归一化**：`step` 接收归一化 4 维动作，按 `data/push_cube_demos/meta/stats.json` 的 mean/std 还原为原始动作后再驱动 mocap+weld；gripper 常量维已防除零。
+- **注册**：gym id `gym_push_cube/PushCube-v0`（直用）+ `gym_push_cube_raw/PushCube-v0`（供 LeRobot gym 集成）；`PushCubeEnvConfig` 以 `push_cube` 注册进 `EnvConfig`，可用 `--env.type=push_cube` 选择。
+
+**前置**：`lerobot` 环境需补装 mujoco（环境底层依赖）：`pip install mujoco==4.0.1`。
+
+**单步验证**（lerobot 环境，随机 10 步 + 原生 `make_env`）：
+```bash
+conda activate lerobot
+export MUJOCO_GL=egl LIBGL_ALWAYS_SOFTWARE=1 EGL_PLATFORM=surfaceless
+python scripts/test_lerobot_push_cube.py    # 打印 TEST LEROBOT PUSH CUBE: PASS
+```
+
+**完整回合 rollout**（官方 `lerobot.scripts.lerobot_eval.rollout` + 随机策略，产出评估视频）：
+```bash
+python scripts/rollout_lerobot_push_cube.py
+# -> assets/eval_random_rollout.mp4（评估视频）
+# -> data/eval_rollout_metrics.json（steps / reward / success）
+```
+
+验证结果：descriptor 正确暴露 `observation.images.main` / `observation.state` 与 4 维动作；rollout 完整跑满 50 步、渲染 51 帧，链路正常。随机策略成功率低属预期（仅验证评估链路，非策略性能）。
+
+---
+
+## 7. 后续规划（第二周）
 
 - **对接 LeRobot 做模仿学习训练**：用本数据集训练行为克隆（BC）与 Diffusion Policy，输入 `(image, state)`、输出 4 维动作。
 - **闭环评测**：把训练策略接回 `PushCubeEnv`，用成功率 / 平均步数 / 回报评估，与专家基线对比。
@@ -250,20 +282,26 @@ mujoco-studio-lab/
 │   ├── scene_overview.png       # 场景全景截图
 │   ├── camera_observation.png   # 相机观测视角截图
 │   ├── goal_reached.png         # 目标到达特写截图
+│   ├── eval_random_rollout.mp4  # LeRobot 随机策略评估视频
 │   └── *.png / demo.*           # 其余验证图与 WebViewer 热重载录屏
 ├── envs/
 │   ├── push_cube_env.py         # Gymnasium 环境（观测/动作/奖励/终止/步进）
+│   ├── lerobot_push_cube_env.py # LeRobot 兼容封装 + 注册 + 反归一化
 │   ├── test_env.py / test_reward.py
 ├── scripts/
 │   ├── collect_demos.py         # 专家演示生成 + LeRobot 导出 + 验证（三段式）
 │   ├── stress_test.py           # 全链路压测
 │   ├── record_expert_video.py   # 离屏录制演示视频 + 关键截图
+│   ├── test_lerobot_push_cube.py      # 环境单步验证 + 原生 make_env
+│   ├── rollout_lerobot_push_cube.py   # 官方 rollout + 评估视频
 │   ├── record_demo.py           # WebViewer 热重载录屏复现
 │   └── start_*.sh               # 一键启动脚本
 ├── utils/
 │   ├── vision.py                # 离屏渲染 / PNG 导出 / 黑帧检测 / 帧差
 │   └── validation.py            # 接触穿透检查 / 数据对齐 / 重置稳定性
-├── data/push_cube_demos/        # LeRobot v3 数据集（入库）
+├── data/
+│   ├── push_cube_demos/         # LeRobot v3 数据集（入库）
+│   └── eval_rollout_metrics.json      # rollout 评估指标
 ├── docs/                        # env / scene / task / integration 说明
 ├── push_sim.py / model.xml / simulate.py   # WebViewer 串流 + 热重载 demo
 └── README.md

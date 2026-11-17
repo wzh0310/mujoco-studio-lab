@@ -1,0 +1,9 @@
+{
+  "steps": 50,
+  "total_reward": -1.1918178796768188,
+  "success": false,
+  "rendered_frames": 51,
+  "policy": "RandomPolicy (mild forward bias)",
+  "env": "push_cube (LeRobot native vector env)",
+  "rollout_api": "lerobot.scripts.lerobot_eval.rollout"
+}
