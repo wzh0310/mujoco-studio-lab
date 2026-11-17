@@ -145,3 +145,41 @@ obs, r, term, trunc, info = env.step(env.action_space.sample())  # 随机交互
 - step() 全链路：注入成功状态后 step 零动作 → r=+11.915, term=True（先于截断）；
   注入掉落状态 → term=True, r_fail=-1
 - 端到端带 EGL：image 观测 (224,224,3) uint8 正常输出
+
+## Demo6: 专家演示数据生成与 LeRobot 导出（scripts/collect_demos.py）
+
+### 专家轨迹（脚本生成，无遥操作）
+- 三段式轨迹：home → 立方体后方（eased 直线插值 24 步）→ 闭环推物（x 恒速 +y 向目标
+  微调，dist<0.028 停止并保持 3 步）
+- 关键调参：推物高度 push_z=0.86（指尖在立方体顶面，推得稳）、手指预收紧 qpos=0.025
+  （间隙≈立方体宽度，避免从指间溜走）、y 跟踪增益 0.5*(target_y-mocap_y) clip ±0.002
+- 动作 = mocap 目标增量，逐轴 clip ±0.02m（与动作空间一致）；fps=50（dt=0.002×frame_skip10）
+- 生成 10 条带微小初始偏移（dx∈[0,0.02] 远离臂侧保证可达、dy∈±0.02）候选，按
+  （成功 > 步数≤40 > 距离小）筛选 5 条：**全部 36-37 步、终距 0.005-0.015m 全部成功**
+
+### LeRobot 导出（lerobot 环境）
+- 环境：lerobot 0.7.0（v3 数据集格式），补装依赖 datasets/pandas/pyarrow/jsonlines/av==15.1.0
+  （av 19 无 av.option 会 import 失败；lerobot 官方 pin av>=15,<16）
+- API：`LeRobotDataset.create(repo_id, fps, features, root, use_videos=True)` →
+  `add_frame({images, state, action, task})` → `save_episode()` → `finalize()`
+- features：observation.images.main（video 224×224×3）/ observation.state（13 维）/
+  action（4 维 [dx,dy,dz,gripper]）
+- 产物（data/push_cube_demos，484KB）：data/chunk-000/file-000.parquet +
+  videos/observation.images.main/chunk-000/file-000.mp4（SVT-AV1 编码）+
+  meta/{info.json, stats.json, tasks.parquet, episodes/...}
+
+### 读取验证（lerobot 环境，全部通过）
+- `LeRobotDataset(repo_id, root, video_backend='pyav')`：5 episodes / 183 frames / fps=50
+- 样本字段：image (3,224,224) float、action (4,)、state (13,)、timestamp/frame_index/
+  episode_index/task_index/task 全部就位
+- parquet：timestamps [0, 0.02, 0.04...]、episodes [0-4]、每回合帧数 [37,36,36,37,37]
+- 全部回合视频解码成功（torchcodec 缺失时 pyav 自动回退）
+
+### 复现
+```bash
+# mujoco 环境
+python scripts/collect_demos.py gen --episodes 10 --select 5
+# lerobot 环境
+python scripts/collect_demos.py export --raw data/raw_demos.npz --out data/push_cube_demos
+python scripts/collect_demos.py verify --root data/push_cube_demos
+```

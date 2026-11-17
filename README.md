@@ -129,3 +129,10 @@ mujoco-studio --model=assets/scenes/push_cube.xml --gfx=web --port=8082 --hot_re
 ├── assets/scenes/push_cube.xml  # 完整任务场景
 └── assets/{top_cam,global_cam,*_push}_224.png + push_webviewer.png  # 验证图
 ```
+
+## Demo6 - 专家演示数据集（LeRobot 格式）
+
+`scripts/collect_demos.py` 三段式：`gen`（mujoco 环境仿真 10 条候选、筛选 5 条最优专家推物演示）
+-> `export`（lerobot 环境导出 LeRobot v3 数据集）-> `verify`（读取验证）。
+数据集在 `data/push_cube_demos/`（5 episodes / 183 frames / fps 50，224x224 top_cam 视频 +
+13 维状态 + 4 维动作），供第二周模仿学习训练使用。详见 `docs/task.md`。
