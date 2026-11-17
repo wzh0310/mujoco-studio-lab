@@ -122,3 +122,26 @@ obs, r, term, trunc, info = env.step(env.action_space.sample())  # 随机交互
 验证（`envs/test_env.py`）：50 步随机动作无报错，`image` (224,224,3) uint8、
 `state` (13,) float32；脚本化推动序列下奖励随立方体靠近目标而增大
 （dist 0.216 → 0.112，reward -0.216 → -0.112）。
+
+## Demo5: 奖励函数与终止条件（envs/push_cube_env.py v2）
+
+### 奖励设计：稠密引导 + 稀疏最终奖励
+| 分量 | 公式 | 系数 |
+|------|------|------|
+| 稀疏成功 | 立方体中心距目标 < 0.03m → +10，回合立即终止 | SUCCESS_BONUS=10 |
+| 稠密1 距离整形 | `-(dist_t - dist_{t-1}) * K_DIST`（势能差分，距离减小为正） | K_DIST=10 |
+| 稠密2 末端引导 | `-||ee - cube|| * K_EE`（弱引导，避免本末倒置） | K_EE=0.1 |
+| 时间惩罚 | 每步 -0.01，鼓励快速完成 | TIME_PENALTY=0.01 |
+| 失败惩罚 | 立方体掉出桌面 → -1，回合终止 | FAIL_PENALTY=-1 |
+
+### 终止与截断
+- **terminated**：成功（dist < 0.03m）或失败（立方体中心低于桌面顶 0.03m，或 xy 超出桌面范围）
+- **truncated**：`max_episode_steps=50`，且 terminated 未触发时才截断
+
+### 调试验证（envs/test_reward.py，16 项断言全部 PASS）
+- 注入 4 个关键状态：初始（shaping=0、r=-0.1*ee-0.01）、中途（dist 0.20→0.10，shaping=+1.0）、
+  成功（+10 并终止）、失败（-1 并终止，含 y 越界与 z 坠落两种）
+- 完整随机回合：恰在第 50 步 trunc=True 截断，奖励全程有限
+- step() 全链路：注入成功状态后 step 零动作 → r=+11.915, term=True（先于截断）；
+  注入掉落状态 → term=True, r_fail=-1
+- 端到端带 EGL：image 观测 (224,224,3) uint8 正常输出
