@@ -1,0 +1,52 @@
+{
+  "observation": {
+    "image": {
+      "key": "observation.images.main",
+      "dtype": "video",
+      "shape": [
+        224,
+        224,
+        3
+      ]
+    },
+    "state": {
+      "key": "observation.state",
+      "dtype": "float32",
+      "shape": [
+        13
+      ],
+      "names": [
+        "joint_0",
+        "joint_1",
+        "joint_2",
+        "joint_3",
+        "joint_4",
+        "joint_5",
+        "joint_6",
+        "cube_x",
+        "cube_y",
+        "cube_z",
+        "target_x",
+        "target_y",
+        "target_z"
+      ]
+    }
+  },
+  "action": {
+    "key": "action",
+    "dtype": "float32",
+    "shape": [
+      4
+    ],
+    "names": [
+      "dx",
+      "dy",
+      "dz",
+      "gripper"
+    ]
+  },
+  "episode_index": {
+    "dtype": "int64"
+  },
+  "_source": "mirrors info.json['features'] (LeRobot v3 native schema)"
+}

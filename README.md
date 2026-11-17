@@ -184,8 +184,9 @@ data/push_cube_demos/
 ├── videos/observation.images.main/
 │   └── chunk-000/file-000.mp4            # 224×224 AV1 视频（每帧图像）
 └── meta/
-    ├── info.json                         # 数据集元信息 / features / 切分
-    ├── stats.json                        # 各字段统计量（供训练归一化）
+    ├── info.json                         # 元信息 / features / 8:2 切分
+    ├── features.json                     # 观测/动作空间的独立可读定义
+    ├── stats.json                        # 各字段 mean/std/min/max（训练归一化）
     ├── tasks.parquet                     # 任务描述表
     └── episodes/chunk-000/file-000.parquet
 ```
@@ -207,6 +208,22 @@ from lerobot.datasets.lerobot_dataset import LeRobotDataset
 ds = LeRobotDataset('push_cube_expert', root='data/push_cube_demos', video_backend='pyav')
 print(ds.num_episodes, ds.num_frames, ds.fps)   # 5 183 50
 sample = ds[0]                                  # image (3,224,224) / action (4,) / state (13,)
+```
+
+**8:2 训练/验证切分**（LeRobot 原生 `splits`，基于 episode 连续编号）：`info.json` 的
+`splits = {"train": "0:4", "val": "4:5"}` → train 4 episodes / 146 帧（79.8%），
+val 1 episode / 37 帧（20.2%），分布一致。用原生 `episodes` 参数加载子集：
+
+```python
+tr = LeRobotDataset('push_cube_expert', root='data/push_cube_demos', video_backend='pyav', episodes=[0,1,2,3])
+va = LeRobotDataset('push_cube_expert', root='data/push_cube_demos', video_backend='pyav', episodes=[4])
+```
+
+一键验证原生加载（打印长度/episode 数、batch shape/dtype、随机帧时空对齐图、动作归一化）：
+
+```bash
+python scripts/prepare_dataset.py    # 生成 features.json、重算 stats.json、设置 8:2 splits
+python scripts/verify_dataset.py     # 打印 VERIFY DATASET OK，产出 assets/dataset_sample.png
 ```
 
 > 原始中间产物 `data/raw_demos.npz` 已被 `.gitignore` 忽略，不入库；入库的是标准化的 `data/push_cube_demos/`。
