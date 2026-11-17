@@ -1,6 +1,8 @@
 <mujoco model="push cube scene">
-  <!-- 场景骨架: Franka Panda + 桌面 + 地面 + 双相机。模型来自 MuJoCo Menagerie, 通过 include 引入。 -->
-  <include file="../franka/panda.xml"/>
+  <!-- Push-cube task scene. Franka Panda (Menagerie) driven by a mocap body via a weld
+       constraint -- no hand-written low-level control; MuJoCo solves IK internally.
+       Interaction objects: 0.05m / 0.1kg cube (freejoint) + translucent red target disc. -->
+  <include file="../franka/panda_mocap.xml"/>
 
   <visual>
     <headlight diffuse="0.6 0.6 0.6" ambient="0.30 0.30 0.30" specular="0.05 0.05 0.05"/>
@@ -15,6 +17,8 @@
     <material name="groundplane" texture="groundplane" texuniform="true" texrepeat="6 6" reflectance="0.15"/>
     <material name="table_top_mat" rgba="0.58 0.40 0.24 1" specular="0.35" shininess="0.35"/>
     <material name="table_leg_mat" rgba="0.22 0.24 0.28 1"/>
+    <material name="cube_mat" rgba="0.95 0.42 0.16 1"/>
+    <material name="target_mat" rgba="0.95 0.12 0.15 0.35"/>
   </asset>
 
   <worldbody>
@@ -23,28 +27,53 @@
 
     <geom name="floor" type="plane" size="0 0 0.05" material="groundplane"/>
 
-    <!-- 桌面: 顶面 z=0.75m, 0.8m x 0.6m, 位于机械臂基座前方 -->
+    <!-- Table: top surface z=0.75m, 0.8m x 0.6m, in front of the robot base -->
     <body name="table" pos="0.85 0 0">
-      <geom name="table_top" type="box" pos="0 0 0.735" size="0.4 0.3 0.015" material="table_top_mat"/>
+      <geom name="table_top" type="box" pos="0 0 0.735" size="0.4 0.3 0.015" material="table_top_mat" friction="1 0.1 0.01"/>
       <geom name="leg_1" type="box" pos="-0.36 -0.26 0.36" size="0.02 0.02 0.36" material="table_leg_mat"/>
       <geom name="leg_2" type="box" pos=" 0.36 -0.26 0.36" size="0.02 0.02 0.36" material="table_leg_mat"/>
       <geom name="leg_3" type="box" pos="-0.36  0.26 0.36" size="0.02 0.02 0.36" material="table_leg_mat"/>
       <geom name="leg_4" type="box" pos=" 0.36  0.26 0.36" size="0.02 0.02 0.36" material="table_leg_mat"/>
     </body>
 
-    <!-- 待推方块 (放在桌面上, 供后续 push 任务使用) -->
-    <body name="cube" pos="0.62 -0.12 0.78">
-      <geom name="cube_geom" type="box" size="0.03 0.03 0.03" rgba="0.95 0.42 0.16 1" friction="1.0 0.1 0.01" density="400"/>
+    <!-- Manipulated object: 0.05m cube, mass 0.1kg (density 800), free to move.
+         Default-ish friction; cube-table contact uses geometric mean. -->
+    <body name="cube" pos="0.62 -0.12 0.775">
+      <freejoint name="cube_free"/>
+      <geom name="cube_geom" type="box" size="0.025 0.025 0.025" material="cube_mat"
+            friction="1.0 0.1 0.01" density="800"/>
     </body>
 
-    <!-- 相机1: 主俯视相机, 正对桌面 (采集 RGB 观测用) -->
-    <camera name="top_cam" pos="0.7 0 1.7" quat="1.000000 0.000000 0.000000 0.000000"/>
-    <!-- 相机2: 全局视角相机 -->
+    <!-- Target zone: translucent RED circular disc, 0.2m in front of the cube (+x).
+         contype=0 / conaffinity=0 -> purely visual, never collides. -->
+    <body name="target" pos="0.82 -0.12 0.752">
+      <geom name="target_disc" type="cylinder" size="0.06 0.002" material="target_mat"
+            contype="0" conaffinity="0"/>
+    </body>
+
+    <!-- Mocap body: the end-effector target. Moving it drives the arm through the
+         weld constraint below (MuJoCo solves the internal IK/position control).
+         Initial pose == 'home' hand pose so the weld starts at zero error. -->
+    <body name="mocap" mocap="true" pos="0.088000 0.000000 0.926000" quat="0.000000 0.923880 0.382683 0.000000">
+      <geom type="sphere" size="0.012" rgba="0.1 0.9 0.3 0.85" contype="0" conaffinity="0"/>
+    </body>
+
+    <!-- Camera 1: fixed RGB observation camera. Framed to fully cover the EE working
+         area + cube + target. Intended output resolution 224x224 (visual algorithms). -->
+    <camera name="top_cam" pos="0.65 -0.10 1.75" xyaxes="1 0 0 0 1 0" fovy="50"/>
+
+    <!-- Camera 2: global overview camera -->
     <camera name="global_cam" pos="1.7 -1.7 1.35" quat="0.780404 0.539416 0.179805 0.260135"/>
   </worldbody>
 
+  <equality>
+    <!-- Weld EE (hand) to the mocap target. This is the whole "controller":
+         set mocap_pos/mocap_quat and MuJoCo's constraint solver moves the arm. -->
+    <weld name="ee_weld" body1="mocap" body2="hand" solref="0.01 1" solimp="0.9 0.95 0.001"/>
+  </equality>
+
   <keyframe>
-    <!-- hover: 末端 (夹爪尖) 悬停在桌面上方约 0.11m -->
-    <key name="hover" qpos="-0.0000 0.2846 0.0000 -0.7993 -0.0000 2.2312 -0.7853"/>
+    <!-- arm joints at home (all zero) + cube freejoint (pos + quat) -->
+    <key name="push_home" qpos="0 0 0 0 0 0 0 0 0  0.62 -0.12 0.775 1 0 0 0"/>
   </keyframe>
 </mujoco>

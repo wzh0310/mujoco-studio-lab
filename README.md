@@ -91,3 +91,40 @@ mujoco-studio --model=assets/scenes/push_cube.xml --gfx=web --port=8082 --hot_re
 ├── assets/scenes/push_cube.xml  # 基础场景骨架
 └── assets/{scene_default,scene_dragged,top_cam,global_cam}.png  # 可视化验证截图
 ```
+
+
+---
+
+## Demo 3：交互物体 + mocap 驱动（推物任务）
+
+在场景骨架上加入可操作物体与目标区域，机械臂末端改由 **mocap 体 + 焊接约束**
+驱动——不写任何底层控制，只给末端目标位置，IK 由 MuJoCo 约束求解器内部完成。
+详见 [docs/task.md](docs/task.md)。
+
+要点：
+- **交互物体**：0.05 m / 0.1 kg 立方体（`freejoint`）+ 前方 0.2 m 半透明红色
+  目标圆盘（不参与碰撞）；
+- **驱动**：mocap 体 weld 到 `hand`，移动 `mocap_pos` 即可控制末端；动作空间
+  预留 4 维 `[dx, dy, dz, gripper]`；
+- **自动推物 plugin**（`push_sim.py`）：闭环轨迹演示，立方体滑向目标盘后复位循环；
+- **观测相机**：`top_cam` 固定视角完整覆盖末端+立方体+目标区，输出 **224×224**；
+- 验证：无头仿真立方体被推到 x=0.83（目标盘 0.82）；WebViewer 实测 Errors: 0。
+
+启动（端口 8083）：
+
+```bash
+./scripts/start_push.sh
+```
+
+![WebViewer 推物动画](assets/push_webviewer.png)
+
+目录更新：
+
+```
+├── docs/task.md                 # 交互物体与 mocap 驱动说明
+├── push_sim.py                  # 自动推物 plugin（含 4 维动作接口）
+├── scripts/start_push.sh        # 一键启动推物 demo
+├── assets/franka/panda_mocap.xml  # 无 actuator 的 Panda 副本（mocap 专用）
+├── assets/scenes/push_cube.xml  # 完整任务场景
+└── assets/{top_cam,global_cam,*_push}_224.png + push_webviewer.png  # 验证图
+```
