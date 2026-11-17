@@ -86,6 +86,12 @@ def stage_gen(episodes, select=None):
         env.data.qvel[9:15] = 0.0
         env.data.qpos[7:9] = FINGER_Q            # pre-tighten fingers
         mujoco.mj_forward(env.model, env.data)
+        # FIX: refresh the observation AFTER injecting the cube offset.
+        # Otherwise the first (image, state, action) triple is misaligned: the
+        # cached obs still describes the pre-offset cube position (bug found by
+        # the full-pipeline stress test, mismatch ~0.021 m).
+        obs = env._get_obs()
+        env._prev_dist = env._cube_target_dist()
 
         lane_y = float(cube_start[1])
         rear = np.array([cube_start[0] - 0.08, lane_y, PUSH_Z])

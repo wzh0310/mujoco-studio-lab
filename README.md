@@ -136,3 +136,29 @@ mujoco-studio --model=assets/scenes/push_cube.xml --gfx=web --port=8082 --hot_re
 -> `export`（lerobot 环境导出 LeRobot v3 数据集）-> `verify`（读取验证）。
 数据集在 `data/push_cube_demos/`（5 episodes / 183 frames / fps 50，224x224 top_cam 视频 +
 13 维状态 + 4 维动作），供第二周模仿学习训练使用。详见 `docs/task.md`。
+
+
+---
+
+## 仓库总览（统一目录结构）
+
+```
+mujoco-studio-lab/
+├── assets/            # 模型（franka/）、场景 XML（scenes/）、材质与验证截图
+├── envs/              # Gymnasium 环境封装 + 配套测试（push_cube_env.py）
+├── scripts/           # 数据采集（collect_demos.py）、压测（stress_test.py）、录制/启动脚本
+├── utils/             # 可复用工具：vision.py（渲染/PNG/黑帧）、validation.py（穿透/对齐校验）
+├── docs/              # env / scene / task / integration 说明
+├── data/              # raw_demos.npz（gitignore）+ push_cube_demos（LeRobot 数据集）
+└── README.md
+```
+
+> Demo1 的 `model.xml` / `simulate.py`、Demo3 的 `push_sim.py` 仍留在根目录（分别为对应 demo 的 plugin / 最小场景，路径被启动脚本引用）。
+
+全链路压测与 Bug 修复记录见 [docs/integration.md](docs/integration.md)。一条命令验证全链路：
+
+```bash
+source /opt/miniconda3/etc/profile.d/conda.sh && conda activate mujoco
+export MUJOCO_GL=egl LIBGL_ALWAYS_SOFTWARE=1 EGL_PLATFORM=surfaceless
+python scripts/stress_test.py   # 末尾输出 PASS 即全链路健康
+```
