@@ -1,0 +1,39 @@
+<mujoco model="hot-reload-demo">
+  <!--
+    热重载验证用的最小模型。
+    演示步骤：浏览器打开 WebViewer 后，把下面 sphere 的 rgba 蓝色分量
+    从 "0.3" 改成 "1.0"（即 rgba="0.2 0.6 1.0 1"），保存文件，
+    浏览器会自动重载，球的颜色立刻变化 —— 无需重启仿真。
+  -->
+  <option timestep="0.01"/>
+
+  <visual>
+    <headlight ambient="0.4 0.4 0.4" diffuse="0.8 0.8 0.8" specular="0.1 0.1 0.1"/>
+    <rgba haze="0.15 0.25 0.35 1"/>
+    <global azimuth="140" elevation="-20"/>
+  </visual>
+
+  <asset>
+    <texture type="skybox" builtin="gradient" rgb1="0.1 0.15 0.2" rgb2="0.65 0.75 0.85"
+             width="512" height="512"/>
+    <texture name="grid" type="2d" builtin="checker" width="512" height="512"
+             rgb1="0.15 0.18 0.22" rgb2="0.22 0.26 0.32"/>
+    <material name="grid" texture="grid" texrepeat="8 8" reflectance="0.2"/>
+  </asset>
+
+  <worldbody>
+    <light pos="0 0 4" dir="0 0 -1" directional="true" castshadow="true"/>
+    <geom name="floor" type="plane" size="4 4 0.1" material="grid"/>
+
+    <!-- 改这里 rgba 的第三个分量（蓝）0.3 -> 1.0 验证热重载 -->
+    <body name="ball" pos="0 0 1.2">
+      <joint name="ball_slide" type="slide" axis="0 0 1" range="0.2 2.5"/>
+      <geom name="sphere" type="sphere" size="0.45" rgba="0.2 0.6 0.3 1"
+            condim="3" friction="1 0.05 0.01"/>
+    </body>
+  </worldbody>
+
+  <actuator>
+    <position name="ball_pos" joint="ball_slide" kp="50" ctrlrange="0.2 2.5"/>
+  </actuator>
+</mujoco>
