@@ -125,6 +125,8 @@ python scripts/collect_demos.py verify --root data/push_cube_demos   # 打印 VE
 python scripts/stress_test.py     # 输出 JSON，末尾 PASS=true 即通过
 ```
 
+> 压测自包含：克隆后可直接运行。若本地没有 `data/raw_demos.npz`（已被 gitignore），脚本会自动生成一小批专家数据用于时序对齐校验；A 段（无崩溃/NaN/黑帧）与 C 段（重置稳定性）为硬性指标。
+
 重录本页顶部的 10 秒演示视频与截图：
 
 ```bash

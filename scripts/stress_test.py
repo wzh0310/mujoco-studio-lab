@@ -111,6 +111,14 @@ def main():
     env.close()
 
     raw_path = os.path.join(REPO, "data", "raw_demos.npz")
+    if not os.path.exists(raw_path):
+        # raw_demos.npz is gitignored, so a fresh clone won't have it. Generate
+        # a small expert batch here so check B always runs and the stress test
+        # is self-contained / reproducible straight from a clean checkout.
+        # (The full 5-episode LeRobot dataset is committed separately.)
+        print("[stress] raw_demos.npz not found; generating a small expert "
+              "batch for the alignment check...")
+        cd.stage_gen(episodes=2, select=1)
     if os.path.exists(raw_path):
         raw = np.load(raw_path, allow_pickle=False)
         report["B_alignment"] = uv.check_episode_alignment(
