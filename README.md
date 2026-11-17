@@ -1,164 +1,260 @@
 # mujoco-studio-lab
 
-MuJoCo 4.0 Studio 的第一个 demo：用 `--gfx=web` 把无显示器容器的仿真串流到浏览器，验证视角拖动与 MJCF 热重载。
+**第一周里程碑（v0.1.0-scene-ready）：Franka Panda 推方块任务的纯仿真验证环境 + LeRobot 格式专家演示数据。**
 
-## Demo 预览
+> ⚠️ 定位：**纯算法验证仿真环境，不涉及底层控制**。机械臂由 MuJoCo 的 mocap + weld 约束驱动（内部求解 IK 与位置控制），我们只给末端目标位置；没有自写逆运动学、没有关节力矩控制、不调物理参数（摩擦/质量/阻尼均为默认量级）。第二周将在此环境上对接 LeRobot 做模仿学习训练。
 
-> GIF 占位（下面换成 `assets/demo.gif` 的真实预览）
->
-> ![WebViewer 视角拖动 + 小球热重载变色（10s）](assets/demo.gif)
->
-> 完整 10 秒视频：[assets/demo.mp4](assets/demo.mp4)
+---
 
-画面里：拖动鼠标左键改变相机视角；修改 `model.xml` 中球体的 `rgba` 蓝分量后，
-浏览器自动热重载，小球由绿变蓝——全程无需重启仿真。
+## 演示预览
 
-## 目录
+10 秒专家轨迹：机械臂从初始位置出发，接近立方体 → 下压接触 → 推动到红色目标圆盘（离屏渲染录制，无需 WebViewer）。
+
+![专家推方块演示](assets/expert_push_demo.gif)
+
+[完整 10 秒视频（MP4）](assets/expert_push_demo.mp4) · 640×480 / 24 fps
+
+| 场景全景 (`global_cam`) | 相机观测视角 (`top_cam` 224×224) | 目标到达特写 |
+| :---: | :---: | :---: |
+| ![全景](assets/scene_overview.png) | ![观测](assets/camera_observation.png) | ![到达](assets/goal_reached.png) |
+
+---
+
+## 1. 项目简介
+
+本仓库是「具身智能算法验证」系列的第一站：用 MuJoCo 4.0 搭建一个 **Franka Panda 推方块（push-cube）** 仿真任务，并提供标准化 Gymnasium 接口、稠密+稀疏奖励、脚本化专家演示，以及可直接喂给 LeRobot 的演示数据集。
+
+- **任务**：把边长 0.05 m 的橙色立方体，从桌面 `(0.62, -0.12)` 推到前方 0.2 m 处的半透明红色目标圆盘（中心 `(0.82, -0.12)`，半径 0.03 m 判定成功）。
+- **控制抽象**：末端由一个 mocap 体通过 weld 约束"焊接"到 Panda 的手，只需移动 mocap 目标点，MuJoCo 约束求解器自动完成 IK 与跟随——**我们不写控制器**。
+- **下游用途**：产出的 LeRobot v3 数据集是第二周模仿学习（BC / diffusion policy）训练的输入。
+
+仓库还保留了第一天的 WebViewer 串流 demo（见 [docs/env.md](docs/env.md)），以及从场景骨架到数据集的完整开发记录（[docs/](docs/)）。
+
+---
+
+## 2. 环境依赖
+
+开发和验收全部在一台 Docker 容器 `wzh-ai` 内完成（Ubuntu 22.04 + NVIDIA RTX A6000，CUDA 驱动 550）。**已存在 `mujoco` conda 环境**（Python 3.12），本项目只需要在此基础上补装下列包：
+
+| 包 | 版本（验收值） | 用途 |
+| --- | --- | --- |
+| `mujoco` | 4.0.1 | 物理仿真 + 离屏渲染（`mujoco.Renderer`） |
+| `gymnasium` | 1.4.0 | 标准化 Env / spaces 接口 |
+| `numpy` | 2.5.5 | 数组与轨迹计算 |
+| `pillow` | 13.0.0 | 图像处理 |
+| `opencv-python-headless` | 5.0.0 | 图像/视频工具（无 GUI 依赖） |
+| `pyarrow` | 26.0.1 | LeRobot parquet 读写 |
+| `h5py` | 3.16.0 | HDF5 工具 |
+| `ffmpeg`（系统） | 4.4.2 | 演示视频/GIF 编码 |
+
+> **可视化用 `mujoco` 环境，LeRobot 数据处理用 `lerobot` 环境**（两者分开）。LeRobot 环境为 0.7.0，另需 `av==15.1.0`（av 19 与 lerobot 0.7 不兼容）。
+
+一次性搭建（容器内）：
+
+```bash
+source /opt/miniconda3/etc/profile.d/conda.sh
+conda create -n mujoco python=3.12 -y && conda activate mujoco
+pip install mujoco gymnasium pillow opencv-python-headless pyarrow h5py
+python -c "import mujoco; print(mujoco.__version__)"   # 4.0.1
+```
+
+无头渲染必须设置环境变量（后续每条命令都要）：
+
+```bash
+export MUJOCO_GL=egl LIBGL_ALWAYS_SOFTWARE=1 EGL_PLATFORM=surfaceless
+```
+
+---
+
+## 3. 快速上手
+
+以下命令均在**容器内的仓库根目录**执行，且已激活 `mujoco` 环境并设置好上面的 EGL 变量。
+
+### 步骤 1：场景可视化（WebViewer）
+
+```bash
+./scripts/start_push.sh          # 加载 assets/scenes/push_cube.xml，端口 8083
+```
+
+浏览器打开提示的地址（容器内端口需 SSH 隧道转发到 localhost，见 [docs/env.md](docs/env.md)），即可看到 Panda + 桌面 + 立方体 + 红色目标盘，并观察自动推物动画循环。
+
+或做无浏览器的离屏渲染自检（不需要 WebViewer）：
+
+```bash
+python envs/test_env.py          # 50 步随机交互，打印观测形状与奖励
+```
+
+### 步骤 2：随机交互（Gymnasium 环境）
+
+```bash
+python - <<'PY'
+from envs.push_cube_env import PushCubeEnv
+env = PushCubeEnv()
+obs, info = env.reset(seed=0)
+print('image', obs['image'].shape, 'state', obs['state'].shape)
+ret = 0
+for _ in range(50):
+    obs, r, term, trunc, info = env.step(env.action_space.sample())
+    ret += r
+    if term or trunc:
+        break
+print('return', round(ret, 3), 'steps', info['steps'])
+env.close()
+PY
+```
+
+预期：`image=(224,224,3) uint8`、`state=(13,) float32`，50 步内无报错。
+
+### 步骤 3：数据采集（生成专家演示 → 导出 LeRobot）
+
+```bash
+# mujoco 环境：脚本化专家推物，渲染 224×224 观测，产出 data/raw_demos.npz
+python scripts/collect_demos.py gen --episodes 10 --select 5
+
+# 切到 lerobot 环境：导出为 LeRobot v3 数据集
+conda activate lerobot
+python scripts/collect_demos.py export --raw data/raw_demos.npz --out data/push_cube_demos
+python scripts/collect_demos.py verify --root data/push_cube_demos   # 打印 VERIFY OK
+```
+
+预期：5 episodes / 183 frames / fps=50，末尾打印 `VERIFY OK`。
+
+一键全链路压测（mujoco 环境）：
+
+```bash
+python scripts/stress_test.py     # 输出 JSON，末尾 PASS=true 即通过
+```
+
+重录本页顶部的 10 秒演示视频与截图：
+
+```bash
+python scripts/record_expert_video.py
+```
+
+---
+
+## 4. 接口说明
+
+### 4.1 观测空间 `observation_space`（`spaces.Dict`）
+
+| 键 | 类型 / 形状 | 说明 |
+| --- | --- | --- |
+| `image` | `Box(0,255,(224,224,3),uint8)` | 固定相机 `top_cam` 的 RGB 观测（正下方俯视，fovy=50°，完整覆盖末端+立方体+目标），核心视觉输入 |
+| `state` | `Box(13,),float32` | `[7 个臂关节角] + [cube_x,cube_y,cube_z] + [target_x,target_y,target_z]` |
+
+### 4.2 动作空间 `action_space`（`Box(4,),float32`）
+
+```
+a = [dx, dy, dz, gripper]
+```
+
+- `a[:3]`：末端 **xyz 平移增量**，每轴限幅 `±0.02 m`；`step()` 内把它加到 mocap 目标位置，并 clip 到可达工作空间盒 `x∈[0.10,0.85], y∈[-0.25,0.25], z∈[0.82,1.15]`。
+- `a[3]`：夹爪开合 `0..1`，**接口预留**（推物任务保持闭合，暂不驱动）。
+- 全程 **不触碰关节力矩**，IK 由 weld 约束内部完成。
+
+### 4.3 奖励函数（稠密引导 + 稀疏最终）
+
+`reward = r_shaping + r_ee + r_time + r_sparse + r_fail`
+
+| 分量 | 公式 | 系数 |
+| --- | --- | --- |
+| 稠密·距离整形 | `-K_DIST · (dist_t − dist_{t−1})`（势能差分，靠近为正） | `K_DIST=10` |
+| 稠密·末端引导 | `-K_EE · ‖ee − cube‖`（弱引导，防本末倒置） | `K_EE=0.1` |
+| 时间惩罚 | `-0.01` / 步 | `TIME_PENALTY=0.01` |
+| 稀疏·成功 | 立方体中心距目标 `< 0.03 m` → `+10`，回合终止 | `SUCCESS_BONUS=10` |
+| 失败惩罚 | 立方体掉出桌面 → `-1`，回合终止 | `FAIL_PENALTY=-1` |
+
+- `dist`：立方体中心到目标的 **xy 平面距离**。
+- `terminated`：成功（dist<0.03）或失败（立方体 z 低于桌面顶 0.03 m，或 xy 越出桌面范围）。
+- `truncated`：`max_episode_steps=50`（frame_skip=10，物理步长 2 ms → 每步 20 ms）且未触发 terminated。
+
+奖励函数写成当前状态与 `_prev_dist` 的纯函数，`envs/test_reward.py`（16 项断言）可直接注入关键状态单测。
+
+---
+
+## 5. 数据集格式
+
+演示数据以 **LeRobot v3** 格式存放于 `data/push_cube_demos/`（5 episodes / 183 frames / fps=50）：
+
+```
+data/push_cube_demos/
+├── data/chunk-000/file-000.parquet       # 逐帧: state / action / timestamp / *_index
+├── videos/observation.images.main/
+│   └── chunk-000/file-000.mp4            # 224×224 AV1 视频（每帧图像）
+└── meta/
+    ├── info.json                         # 数据集元信息 / features / 切分
+    ├── stats.json                        # 各字段统计量（供训练归一化）
+    ├── tasks.parquet                     # 任务描述表
+    └── episodes/chunk-000/file-000.parquet
+```
+
+字段（`meta/info.json` 的 `features`）：
+
+| 字段 | dtype / shape | 说明 |
+| --- | --- | --- |
+| `observation.images.main` | video `(224,224,3)` | `top_cam` 视觉观测，存为 AV1 视频 |
+| `observation.state` | float32 `(13,)` | 7 关节角 + 立方体 xyz + 目标 xyz |
+| `action` | float32 `(4,)` | `[dx,dy,dz,gripper]` |
+| `timestamp` | float32 `(1,)` | 回合内相对时间（0, 0.02, 0.04 …） |
+| `frame_index` / `episode_index` / `index` / `task_index` | int64 `(1,)` | 帧/回合/全局/任务索引 |
+
+读取（lerobot 环境）：
+
+```python
+from lerobot.datasets.lerobot_dataset import LeRobotDataset
+ds = LeRobotDataset('push_cube_expert', root='data/push_cube_demos', video_backend='pyav')
+print(ds.num_episodes, ds.num_frames, ds.fps)   # 5 183 50
+sample = ds[0]                                  # image (3,224,224) / action (4,) / state (13,)
+```
+
+> 原始中间产物 `data/raw_demos.npz` 已被 `.gitignore` 忽略，不入库；入库的是标准化的 `data/push_cube_demos/`。
+
+---
+
+## 6. 后续规划（第二周）
+
+- **对接 LeRobot 做模仿学习训练**：用本数据集训练行为克隆（BC）与 Diffusion Policy，输入 `(image, state)`、输出 4 维动作。
+- **闭环评测**：把训练策略接回 `PushCubeEnv`，用成功率 / 平均步数 / 回报评估，与专家基线对比。
+- **数据扩展**：增加立方体初始位姿随机性与多目标点，提升策略泛化；按需引入更丰富的相机视角。
+- **真实迁移预留**：接口与 LeRobot 对齐，后续可替换为真实机器人遥操作数据。
+
+---
+
+## 目录结构
 
 ```
 mujoco-studio-lab/
-├── docs/env.md          # 环境说明与完整复现步骤（容器 / conda / SSH 隧道）
-├── model.xml            # 热重载验证用的最小 MJCF（绿色小球 + 位置伺服）
-├── simulate.py          # SimPlugin：PreStepEvent 写正弦目标，驱动小球上下运动
-├── scripts/             # 启动脚本 + record_demo.py（录屏复现脚本）
-├── plugins/             # MuJoCo Studio 插件占位
-├── models/              # MJCF 模型占位
-├── demos/               # 4.0 新特性演示占位
-└── assets/              # 录屏产物
-    ├── demo.mp4         # 10 秒演示视频（H.264, 960x600）
-    ├── demo.gif         # 同内容的 GIF 预览
-    ├── shot_before.png  # 热重载前（绿色球）
-    └── shot_after.png   # 热重载后（蓝色球）
-```
-
-## 怎么跑
-
-环境搭建（conda `mujoco`，Python 3.12 + MuJoCo 4.0.1）见 [docs/env.md](docs/env.md)。
-容器内启动 WebViewer：
-
-```bash
-source /opt/miniconda3/etc/profile.d/conda.sh && conda activate mujoco
-export MUJOCO_GL=egl LIBGL_ALWAYS_SOFTWARE=1 EGL_PLATFORM=surfaceless
-mujoco-studio --model=model.xml --plugins=simulate.py \
-    --gfx=web --port=8081 --hot_reload=all
-```
-
-浏览器打开提示的地址（`http://localhost:8081`，容器端口需 SSH 隧道转发，见 env.md），
-然后拖动视角、把 `model.xml` 里 sphere 的 `rgba` 蓝分量 `0.3` 改成 `1.0` 保存，观察小球变蓝。
-
-重录这段 demo（容器内，需 playwright + chromium + ffmpeg）：
-
-```bash
-python scripts/record_demo.py
-```
-
-## 这段录屏说明了什么
-
-- **Filament**：MuJoCo Studio 的 PBR 渲染后端，负责小球材质、棋盘地面、阴影与光照。
-- **Dear ImGui**：左侧 Simulation / 右侧 Inspector 等界面组件，可 dock、可实时调参。
-- **`--gfx=web`**：物理与 UI 分离在两端，通过非阻塞消息通道同步。无 GPU / 无显示器的机器跑物理，浏览器只负责串流显示；一个浏览器是 controller（可驱动仿真），其余为 spectator。这也是这段 10 秒录屏想展示的核心能力。
-
-
----
-
-## Demo 2：场景骨架（Franka Panda + 桌面）
-
-导入官方 [MuJoCo Menagerie](https://github.com/google-deepmind/mujoco_menagerie) 的
-`franka_emika_panda`，搭好桌面 + 地面基础场景，验证可视化正常。详见 [docs/scene.md](docs/scene.md)。
-
-![场景骨架：机械臂 + 桌面 + 双相机](assets/scene_default.png)
-
-要点：
-- 模型放在 `assets/franka/`，主场景 `assets/scenes/push_cube.xml` 通过 `<include>` 引入；
-- 地面 + 0.8×0.6 m 桌面（顶面 0.75 m）+ 灯光 + 双相机（`top_cam` 俯视观测 / `global_cam` 全局）；
-- `hover` 关键帧：末端夹爪尖悬停在桌面上方 0.105 m，数值 IK 求得，无穿模（`pens=0`）；
-- 已用 `mujoco-studio --gfx=web` 验证：拖动视角、暂停/播放无报错（Errors: 0）。
-
-启动（端口 8082）：
-
-```bash
-source /opt/miniconda3/etc/profile.d/conda.sh && conda activate mujoco
-export MUJOCO_GL=egl LIBGL_ALWAYS_SOFTWARE=1 EGL_PLATFORM=surfaceless
-mujoco-studio --model=assets/scenes/push_cube.xml --gfx=web --port=8082 --hot_reload=all
-# 或 ./scripts/start_webviewer.sh   (默认即场景骨架)
-```
-
-目录更新：
-
-```
-├── docs/scene.md        # 场景骨架说明（模型来源/构成/验证）
-├── assets/franka/       # 官方 Panda 模型 + 67 个 mesh
-├── assets/scenes/push_cube.xml  # 基础场景骨架
-└── assets/{scene_default,scene_dragged,top_cam,global_cam}.png  # 可视化验证截图
-```
-
-
----
-
-## Demo 3：交互物体 + mocap 驱动（推物任务）
-
-在场景骨架上加入可操作物体与目标区域，机械臂末端改由 **mocap 体 + 焊接约束**
-驱动——不写任何底层控制，只给末端目标位置，IK 由 MuJoCo 约束求解器内部完成。
-详见 [docs/task.md](docs/task.md)。
-
-要点：
-- **交互物体**：0.05 m / 0.1 kg 立方体（`freejoint`）+ 前方 0.2 m 半透明红色
-  目标圆盘（不参与碰撞）；
-- **驱动**：mocap 体 weld 到 `hand`，移动 `mocap_pos` 即可控制末端；动作空间
-  预留 4 维 `[dx, dy, dz, gripper]`；
-- **自动推物 plugin**（`push_sim.py`）：闭环轨迹演示，立方体滑向目标盘后复位循环；
-- **观测相机**：`top_cam` 固定视角完整覆盖末端+立方体+目标区，输出 **224×224**；
-- 验证：无头仿真立方体被推到 x=0.83（目标盘 0.82）；WebViewer 实测 Errors: 0。
-
-启动（端口 8083）：
-
-```bash
-./scripts/start_push.sh
-```
-
-![WebViewer 推物动画](assets/push_webviewer.png)
-
-目录更新：
-
-```
-├── envs/push_cube_env.py        # Gymnasium 环境封装（观测/动作/奖励/步进）
-├── docs/task.md                 # 交互物体与 mocap 驱动说明
-├── push_sim.py                  # 自动推物 plugin（含 4 维动作接口）
-├── scripts/start_push.sh        # 一键启动推物 demo
-├── assets/franka/panda_mocap.xml  # 无 actuator 的 Panda 副本（mocap 专用）
-├── assets/scenes/push_cube.xml  # 完整任务场景
-└── assets/{top_cam,global_cam,*_push}_224.png + push_webviewer.png  # 验证图
-```
-
-## Demo6 - 专家演示数据集（LeRobot 格式）
-
-`scripts/collect_demos.py` 三段式：`gen`（mujoco 环境仿真 10 条候选、筛选 5 条最优专家推物演示）
--> `export`（lerobot 环境导出 LeRobot v3 数据集）-> `verify`（读取验证）。
-数据集在 `data/push_cube_demos/`（5 episodes / 183 frames / fps 50，224x224 top_cam 视频 +
-13 维状态 + 4 维动作），供第二周模仿学习训练使用。详见 `docs/task.md`。
-
-
----
-
-## 仓库总览（统一目录结构）
-
-```
-mujoco-studio-lab/
-├── assets/            # 模型（franka/）、场景 XML（scenes/）、材质与验证截图
-├── envs/              # Gymnasium 环境封装 + 配套测试（push_cube_env.py）
-├── scripts/           # 数据采集（collect_demos.py）、压测（stress_test.py）、录制/启动脚本
-├── utils/             # 可复用工具：vision.py（渲染/PNG/黑帧）、validation.py（穿透/对齐校验）
-├── docs/              # env / scene / task / integration 说明
-├── data/              # raw_demos.npz（gitignore）+ push_cube_demos（LeRobot 数据集）
+├── assets/
+│   ├── franka/                  # 官方 Panda 模型 + panda_mocap.xml（无 actuator）
+│   ├── scenes/push_cube.xml     # 任务场景（mocap+weld + 立方体 + 目标 + 双相机）
+│   ├── expert_push_demo.mp4/.gif# 10 秒专家演示（本页顶部）
+│   ├── scene_overview.png       # 场景全景截图
+│   ├── camera_observation.png   # 相机观测视角截图
+│   ├── goal_reached.png         # 目标到达特写截图
+│   └── *.png / demo.*           # 其余验证图与 WebViewer 热重载录屏
+├── envs/
+│   ├── push_cube_env.py         # Gymnasium 环境（观测/动作/奖励/终止/步进）
+│   ├── test_env.py / test_reward.py
+├── scripts/
+│   ├── collect_demos.py         # 专家演示生成 + LeRobot 导出 + 验证（三段式）
+│   ├── stress_test.py           # 全链路压测
+│   ├── record_expert_video.py   # 离屏录制演示视频 + 关键截图
+│   ├── record_demo.py           # WebViewer 热重载录屏复现
+│   └── start_*.sh               # 一键启动脚本
+├── utils/
+│   ├── vision.py                # 离屏渲染 / PNG 导出 / 黑帧检测 / 帧差
+│   └── validation.py            # 接触穿透检查 / 数据对齐 / 重置稳定性
+├── data/push_cube_demos/        # LeRobot v3 数据集（入库）
+├── docs/                        # env / scene / task / integration 说明
+├── push_sim.py / model.xml / simulate.py   # WebViewer 串流 + 热重载 demo
 └── README.md
 ```
 
-> Demo1 的 `model.xml` / `simulate.py`、Demo3 的 `push_sim.py` 仍留在根目录（分别为对应 demo 的 plugin / 最小场景，路径被启动脚本引用）。
+## 开发记录
 
-全链路压测与 Bug 修复记录见 [docs/integration.md](docs/integration.md)。一条命令验证全链路：
+- [docs/env.md](docs/env.md) — 环境搭建、WebViewer 串流与热重载验证
+- [docs/scene.md](docs/scene.md) — 场景骨架（Panda + 桌面 + 双相机）
+- [docs/task.md](docs/task.md) — 交互物体、mocap 驱动、观测相机校准、Gym 接口、奖励
+- [docs/integration.md](docs/integration.md) — 全链路压测、Bug 修复、穿模调查与结论
 
-```bash
-source /opt/miniconda3/etc/profile.d/conda.sh && conda activate mujoco
-export MUJOCO_GL=egl LIBGL_ALWAYS_SOFTWARE=1 EGL_PLATFORM=surfaceless
-python scripts/stress_test.py   # 末尾输出 PASS 即全链路健康
-```
+**版本**：`v0.1.0-scene-ready`（第一周里程碑）。
