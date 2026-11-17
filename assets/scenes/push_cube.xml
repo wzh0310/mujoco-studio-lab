@@ -1,0 +1,50 @@
+<mujoco model="push cube scene">
+  <!-- 场景骨架: Franka Panda + 桌面 + 地面 + 双相机。模型来自 MuJoCo Menagerie, 通过 include 引入。 -->
+  <include file="../franka/panda.xml"/>
+
+  <visual>
+    <headlight diffuse="0.6 0.6 0.6" ambient="0.30 0.30 0.30" specular="0.05 0.05 0.05"/>
+    <rgba haze="0.16 0.21 0.28 1"/>
+    <global azimuth="135" elevation="-20" fovy="45"/>
+  </visual>
+
+  <asset>
+    <texture type="skybox" builtin="gradient" rgb1="0.34 0.44 0.57" rgb2="0.04 0.06 0.09" width="512" height="3072"/>
+    <texture type="2d" name="groundplane" builtin="checker" mark="edge" rgb1="0.21 0.25 0.31" rgb2="0.13 0.16 0.21"
+      markrgb="0.85 0.85 0.85" width="300" height="300"/>
+    <material name="groundplane" texture="groundplane" texuniform="true" texrepeat="6 6" reflectance="0.15"/>
+    <material name="table_top_mat" rgba="0.58 0.40 0.24 1" specular="0.35" shininess="0.35"/>
+    <material name="table_leg_mat" rgba="0.22 0.24 0.28 1"/>
+  </asset>
+
+  <worldbody>
+    <light pos="0.5 -0.6 2.6" dir="-0.1 0.15 -1" directional="true" diffuse="0.85 0.85 0.82"/>
+    <light pos="-0.9 0.6 1.9" diffuse="0.30 0.34 0.42"/>
+
+    <geom name="floor" type="plane" size="0 0 0.05" material="groundplane"/>
+
+    <!-- 桌面: 顶面 z=0.75m, 0.8m x 0.6m, 位于机械臂基座前方 -->
+    <body name="table" pos="0.85 0 0">
+      <geom name="table_top" type="box" pos="0 0 0.735" size="0.4 0.3 0.015" material="table_top_mat"/>
+      <geom name="leg_1" type="box" pos="-0.36 -0.26 0.36" size="0.02 0.02 0.36" material="table_leg_mat"/>
+      <geom name="leg_2" type="box" pos=" 0.36 -0.26 0.36" size="0.02 0.02 0.36" material="table_leg_mat"/>
+      <geom name="leg_3" type="box" pos="-0.36  0.26 0.36" size="0.02 0.02 0.36" material="table_leg_mat"/>
+      <geom name="leg_4" type="box" pos=" 0.36  0.26 0.36" size="0.02 0.02 0.36" material="table_leg_mat"/>
+    </body>
+
+    <!-- 待推方块 (放在桌面上, 供后续 push 任务使用) -->
+    <body name="cube" pos="0.62 -0.12 0.78">
+      <geom name="cube_geom" type="box" size="0.03 0.03 0.03" rgba="0.95 0.42 0.16 1" friction="1.0 0.1 0.01" density="400"/>
+    </body>
+
+    <!-- 相机1: 主俯视相机, 正对桌面 (采集 RGB 观测用) -->
+    <camera name="top_cam" pos="0.7 0 1.7" quat="1.000000 0.000000 0.000000 0.000000"/>
+    <!-- 相机2: 全局视角相机 -->
+    <camera name="global_cam" pos="1.7 -1.7 1.35" quat="0.780404 0.539416 0.179805 0.260135"/>
+  </worldbody>
+
+  <keyframe>
+    <!-- hover: 末端 (夹爪尖) 悬停在桌面上方约 0.11m -->
+    <key name="hover" qpos="-0.0000 0.2846 0.0000 -0.7993 -0.0000 2.2312 -0.7853"/>
+  </keyframe>
+</mujoco>
