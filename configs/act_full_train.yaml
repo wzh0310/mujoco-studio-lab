@@ -1,0 +1,100 @@
+# ACT 全量数据正式训练配置 (Day-3) —— push_cube, GPU (RTX A6000)
+#
+# 数据集: data/push_cube_demos (40 episodes / 1616 frames, 8:2 split)
+# 环境:   push_cube (LeRobot native registration)
+#  elbow: 50 epoch ≈ 4000 step (batch16, ~80 step/epoch), checkpoint 每 5 epoch
+#
+# 相对基线 act_baseline.yaml 的变化:
+#   - device: cpu -> cuda; 混合精度用 fp32 (bf16 会让 LeRobot 内置 eval rollout
+#     的 action.numpy() 因 BFloat16 报错崩溃; A6000 fp32 + TF32 已足够快)
+#   - 全量 40 episodes 数据; eval_split=0.2 留出验证集监控过拟合
+#   - eval_steps>0 计算 held-out loss; save_freq 每 5 epoch
+#   - output_dir 全新路径 (LeRobot 要求不存在)
+
+output_dir: /data/wzh/robot/outputs/act_push_cube_full
+job_name: act_push_cube_full
+seed: 1000
+resume: false
+
+# ----------------------------- 训练节奏 (50 epoch) -------------------------
+steps: 4000                 # ≈ 50 epoch (1616fr * 0.8 / 16 ≈ 81 step/epoch)
+batch_size: 16
+num_workers: 4
+prefetch_factor: 4
+persistent_workers: true
+log_freq: 20
+save_freq: 800              # 每 5 epoch 存一次 checkpoint (~80 step/epoch)
+save_checkpoint: true
+eval_steps: 200             # 每 ~2.5 epoch 计算 held-out loss
+max_eval_samples: 0
+env_eval_freq: 1000         # 每 ~12 epoch 跑一次仿真 rollout + 视频
+tf32: true                  # A6000 (Ampere) 支持 TF32
+cudnn_deterministic: false
+
+# ----------------------------- 数据集 --------------------------------------
+dataset:
+  repo_id: push_cube_expert
+  repo_type: dataset
+  root: /data/wzh/robot/mujoco-studio-lab/data/push_cube_demos
+  episodes: null
+  exclude_episodes: null
+  eval_split: 0.2            # 8:2 之外再从 train 留 20% 作 held-out, 判断过拟合
+  use_imagenet_stats: true
+  video_backend: pyav
+  revision: null
+  streaming: false
+  image_transforms:
+    enable: false
+    backend: dataloader
+    max_num_transforms: 3
+    random_order: false
+
+# ----------------------------- 策略: ACT -----------------------------------
+policy:
+  type: act
+  device: cuda
+  push_to_hub: false
+  repo_id: local/act_push_cube_full
+
+  n_obs_steps: 1
+  chunk_size: 20
+  n_action_steps: 20
+
+  vision_backbone: resnet18
+  dim_model: 128
+  n_heads: 8
+  dim_feedforward: 512
+  n_encoder_layers: 1
+  n_decoder_layers: 1
+  dropout: 0.1
+
+  use_vae: true
+  latent_dim: 8
+  n_vae_encoder_layers: 1
+  kl_weight: 1.0
+
+  optimizer_lr: 1e-5
+  optimizer_lr_backbone: 1e-5
+  optimizer_weight_decay: 1e-4
+  use_amp: false            # 用顶层 accelerator.mixed_precision=bf16 控制
+
+# ----------------------------- 加速 / 评估环境 -----------------------------
+accelerator:
+  mixed_precision: "no"      # 必须加引号: 裸 no 会被 YAML 解析成 bool False; bf16 会让内置 rollout 的 .numpy() 崩溃
+
+env:
+  type: push_cube
+  task: push_cube
+  fps: 50
+  episode_length: 50
+
+eval:
+  n_episodes: 2
+  batch_size: 1
+  use_async_envs: false
+  recording: true
+  max_episode_steps: 50
+
+trackio:
+  enable: false        # trackio 未安装; 日志通过 stdout 重定向到 train.log 落地
+  project: lerobot

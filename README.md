@@ -337,3 +337,19 @@ mujoco-studio-lab/
 
 **版本**：`v0.2.0-lerobot-ready`（第二周里程碑：LeRobot 数据集 / 环境 / ACT 训练全链路就绪）。
 第一周里程碑为 `v0.1.0-scene-ready`。
+
+---
+
+## Day 3–4：全量训练 + 标准化评估（v0.3.0）
+
+- **环境**：lerobot 环境 torch 重装为 2.6.0+cu124，解锁 RTX A6000（训练 ~28 step/s，比 CPU 快约 280×）。
+- **数据**：`scripts/collect_demos_v2.py` 扩充到 **40 条全成功演示**（立方体 + 机械臂起点双重随机偏移），
+  LeRobot v3 数据集 40 ep / 1524 帧，8:2 划分；`scripts/preprocessing.py` 固化归一化规则。
+- **训练**：`configs/act_full_train.yaml`，4000 步（≈50 epoch）GPU 全量训练，验证损失 **0.281→0.144** 单调下降，
+  每 5 epoch 存 checkpoint。bf16 会让内置 rollout 的 `.numpy()` 报错，已改 fp32。
+- **评估**：`scripts/eval_act.py`，3 seeds × 10 = 30 次离屏评估；基线 **成功率 30%、平均完成步数 36.8、
+  平均距离误差 0.134m**（成功回合 0.023m）。`scripts/record_dual_view.py` 生成双视角演示
+  `assets/eval_dual_view.mp4`（左 global_cam + 右 top_cam）。
+- 完整报告见 `docs/DAY34_REPORT.md`。
+
+**版本**：`v0.3.0-full-training-eval`（第三/四周里程碑：全量 GPU 训练 + 标准化评估体系）。

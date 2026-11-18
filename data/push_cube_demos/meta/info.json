@@ -100,8 +100,8 @@
       "names": null
     }
   },
-  "total_episodes": 5,
-  "total_frames": 183,
+  "total_episodes": 40,
+  "total_frames": 1524,
   "total_tasks": 1,
   "chunks_size": 1000,
   "data_files_size_in_mb": 100,
@@ -110,7 +110,7 @@
   "video_path": "videos/{video_key}/chunk-{chunk_index:03d}/file-{file_index:03d}.mp4",
   "robot_type": null,
   "splits": {
-    "train": "0:4",
-    "val": "4:5"
+    "train": "0:32",
+    "val": "32:40"
   }
 }
