@@ -273,6 +273,11 @@ python scripts/train_act_push_cube.py --config_path=configs/act_push_cube.yaml
 wrapper 会先 import `envs/lerobot_push_cube_env` 完成 `push_cube` 注册，再进入官方训练入口；
 `output_dir` 须不存在。冒烟实测 loss `1.78→0.53`（4.37 epoch），checkpoint 与评估视频正常产出。
 
+**基线配置与效率优化**：`configs/act_baseline.yaml` 是 10 epoch 基线配置，启用了经实测验证的
+数据缓存（`persistent_workers=true` + 4 worker + prefetch=4，实测 data_s 从 1.8s 降至 0.01s）。
+AMP 在本容器 CPU 上实测慢 3.4×，故保持关闭；GPU 场景可用 `--accelerator.mixed_precision=bf16`。
+基线结果（loss 曲线 / 成功率 / 评估视频）见兄弟仓库 `embodied-policy-zoo/docs/ACT_IMPLEMENTATION_GUIDE.md`。
+
 ---
 
 ## 7. 后续规划（第二周）
@@ -301,6 +306,9 @@ mujoco-studio-lab/
 │   ├── push_cube_env.py         # Gymnasium 环境（观测/动作/奖励/终止/步进）
 │   ├── lerobot_push_cube_env.py # LeRobot 兼容封装 + 注册 + 反归一化
 │   ├── test_env.py / test_reward.py
+├── configs/
+│   ├── act_push_cube.yaml       # ACT 冒烟训练配置（100 步 / CPU）
+│   └── act_baseline.yaml        # ACT 基线配置（10 epoch / 数据缓存优化）
 ├── scripts/
 │   ├── collect_demos.py         # 专家演示生成 + LeRobot 导出 + 验证（三段式）
 │   ├── stress_test.py           # 全链路压测
@@ -327,4 +335,5 @@ mujoco-studio-lab/
 - [docs/task.md](docs/task.md) — 交互物体、mocap 驱动、观测相机校准、Gym 接口、奖励
 - [docs/integration.md](docs/integration.md) — 全链路压测、Bug 修复、穿模调查与结论
 
-**版本**：`v0.1.0-scene-ready`（第一周里程碑）。
+**版本**：`v0.2.0-lerobot-ready`（第二周里程碑：LeRobot 数据集 / 环境 / ACT 训练全链路就绪）。
+第一周里程碑为 `v0.1.0-scene-ready`。

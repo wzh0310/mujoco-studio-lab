@@ -1,0 +1,99 @@
+# ACT 训练配置 —— push_cube 全链路联调 / 基线实验（优化版）
+#
+# 本配置在冒烟配置基础上应用了经实测验证的效率优化：
+#   - 数据缓存：persistent_workers=true + num_workers=4 + prefetch_factor=4
+#     （Dataset 常驻 worker 内存，减少磁盘/解码 IO；CPU 上 4 worker 实测稳定）
+#   - 混合精度 AMP：保持 accelerator.mixed_precision=no
+#     原因：本容器无 GPU（torch cu132 vs 驱动 12.4），CPU bf16 autocast 实测慢 3.4x
+#     （fp32 0.94s vs bf16 3.27s）。GPU 场景应设 --accelerator.mixed_precision=bf16
+#   - 评估频率：每 5 epoch ≈ 115 step 评估一次（1 epoch≈23 step），减少环境交互开销
+#   - 离屏渲染：MUJOCO_GL=egl（由启动脚本导出），训练中不启动 WebViewer
+#
+# 真实 API 字段映射见 docs/ACT_TRAINING_NOTES.md
+
+# ----------------------------- 运行与产物 -------------------------------
+output_dir: /data/wzh/robot/outputs/act_push_cube_baseline  # 必须不存在
+job_name: act_push_cube_baseline
+seed: 1000
+resume: false
+
+# ----------------------------- 训练节奏 -------------------------------
+steps: 230                 # ≈ 10 epoch（183 帧 / batch8 ≈ 23 step/epoch）
+batch_size: 8
+num_workers: 4             # 优化：worker 常驻内存缓存数据（原 2）
+prefetch_factor: 4         # 优化：预取更多 batch（原 2）
+persistent_workers: true   # 优化：worker 跨 epoch 复用，避免重复加载
+log_freq: 10               # 每 10 步打印 loss
+save_freq: 115             # 每 5 epoch 存一次 checkpoint
+env_eval_freq: 115         # 每 5 epoch ≈ 115 step 评估一次（生成视频）
+eval_steps: 0
+max_eval_samples: 0
+tf32: false                # CPU 关闭
+cudnn_deterministic: false
+save_checkpoint: true
+
+# ----------------------------- 数据集（本地自定义） --------------------
+dataset:
+  repo_id: push_cube_expert
+  repo_type: dataset
+  root: /data/wzh/robot/mujoco-studio-lab/data/push_cube_demos
+  episodes: null
+  exclude_episodes: null
+  eval_split: 0.0
+  use_imagenet_stats: true # 图像已归一化到 [0,1]，训练侧再做 ImageNet 标准化
+  video_backend: pyav
+  revision: null
+  streaming: false
+  image_transforms:
+    enable: false
+    backend: dataloader
+    max_num_transforms: 3
+    random_order: false
+
+# ----------------------------- 策略：ACT -------------------------------
+policy:
+  type: act
+  device: cpu               # CUDA 不匹配 → CPU
+  push_to_hub: false
+  repo_id: local/act_push_cube_baseline
+
+  n_obs_steps: 1
+  chunk_size: 20
+  n_action_steps: 20
+
+  vision_backbone: resnet18
+  dim_model: 128
+  n_heads: 8
+  dim_feedforward: 512
+  n_encoder_layers: 1
+  n_decoder_layers: 1
+  dropout: 0.1
+
+  use_vae: true
+  latent_dim: 8
+  n_vae_encoder_layers: 1
+  kl_weight: 1.0
+
+  optimizer_lr: 1e-5
+  optimizer_lr_backbone: 1e-5
+  optimizer_weight_decay: 1e-4
+  use_amp: false            # CPU 上 AMP 变慢；GPU 场景改用 accelerator.mixed_precision=bf16
+
+# ----------------------------- 评估环境 --------------------------------
+env:
+  type: push_cube
+  task: push_cube
+  fps: 50
+  episode_length: 50
+
+eval:
+  n_episodes: 1
+  batch_size: 1
+  use_async_envs: false
+  recording: true
+  max_episode_steps: 50
+
+# ----------------------------- 实验追踪 --------------------------------
+trackio:
+  enable: false
+  project: lerobot
