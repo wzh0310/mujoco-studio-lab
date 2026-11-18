@@ -1,0 +1,100 @@
+# ACT 训练配置 —— 自定义 push_cube 场景（冒烟测试）
+#
+# 来源：pusht-policy-bench/configs/act_pusht.yaml（官方 ACT 模板的本地沉淀版）
+# 适配：le robot 0.7.0（2026 定制版），以容器内真实源码字段为准
+#
+# 与任务描述的字段映射（真实 API 说明，见 docs/ACT_TRAINING_NOTES.md）：
+#   dataset_repo_id -> dataset.repo_id + dataset.root（本地路径）
+#   env.name=push_cube -> env.type=push_cube（@EnvConfig.register_subclass）
+#   action_dim=4 -> 由数据集 output_features 自动推断（ACTConfig 无 action_dim 字段）
+#   chunk_size=20 -> policy.chunk_size=20, policy.n_action_steps=20
+#   num_epochs=2 -> steps（LeRobot 无 epoch 概念；183 帧/5ep，batch8，2ep≈46步，取100步覆盖"前100步"）
+#
+# 启动：见 scripts/train_act_push_cube.sh（wrapper 会先注册自定义环境再训练）
+
+# ----------------------------- 运行与产物 -------------------------------
+output_dir: /data/wzh/robot/outputs/act_push_cube_smoke   # 必须不存在，否则 FileExistsError
+job_name: act_push_cube_smoke
+seed: 1000
+resume: false
+
+# ----------------------------- 训练节奏（CPU 冒烟） --------------------
+steps: 100                 # 覆盖"前100步"要求；≈ 数据集 4 epoch（183帧/batch8）
+batch_size: 8              # 用户指定
+num_workers: 2             # CPU 环境不宜过多
+prefetch_factor: 2
+persistent_workers: false
+log_freq: 10               # 每 10 步打印 loss，便于观察前 100 步
+save_freq: 100             # 末尾存 checkpoint
+env_eval_freq: 50          # 第 50/100 步触发仿真评估（生成视频）
+eval_steps: 0              # 无 held-out loss（dataset.eval_split=0）
+max_eval_samples: 0
+tf32: false                # CPU 关闭
+cudnn_deterministic: false
+save_checkpoint: true
+
+# ----------------------------- 数据集（本地自定义） --------------------
+dataset:
+  repo_id: push_cube_expert
+  repo_type: dataset
+  root: /data/wzh/robot/mujoco-studio-lab/data/push_cube_demos
+  episodes: null
+  exclude_episodes: null
+  eval_split: 0.0
+  use_imagenet_stats: true
+  video_backend: pyav
+  revision: null
+  streaming: false
+  image_transforms:
+    enable: false
+    backend: dataloader
+    max_num_transforms: 3
+    random_order: false
+
+# ----------------------------- 策略：ACT（缩小以适配 CPU） -------------
+policy:
+  type: act
+  device: cpu               # 宿主 CUDA 12.4 / torch cu132 不匹配，GPU 不可用
+  push_to_hub: false
+  repo_id: local/act_push_cube_smoke
+
+  n_obs_steps: 1
+  chunk_size: 20            # 用户指定，匹配回合长度（36-37 步）
+  n_action_steps: 20        # 必须 <= chunk_size
+
+  vision_backbone: resnet18
+  dim_model: 128            # 默认 512，冒烟进一步缩小
+  n_heads: 8
+  dim_feedforward: 512      # 默认 3200，缩小
+  n_encoder_layers: 1       # 默认 4，缩小
+  n_decoder_layers: 1
+  dropout: 0.1
+
+  use_vae: true             # 保留 ACT 核心 CVAE
+  latent_dim: 8             # 默认 32
+  n_vae_encoder_layers: 1
+  kl_weight: 1.0            # 默认 10，降低使初始 loss 落入 1-10 区间
+
+  optimizer_lr: 1e-5
+  optimizer_lr_backbone: 1e-5
+  optimizer_weight_decay: 1e-4
+  use_amp: false            # CPU 关闭，避免 NaN
+
+# ----------------------------- 评估环境（自定义注册） ------------------
+env:
+  type: push_cube           # @EnvConfig.register_subclass("push_cube")
+  task: push_cube
+  fps: 50
+  episode_length: 50
+
+eval:
+  n_episodes: 1             # 冒烟：1 个 episode 足够验证链路
+  batch_size: 1
+  use_async_envs: false     # CPU 同步更稳
+  recording: true           # 生成评估视频
+  max_episode_steps: 50
+
+# ----------------------------- 实验追踪 --------------------------------
+trackio:
+  enable: false
+  project: lerobot

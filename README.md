@@ -260,11 +260,24 @@ python scripts/rollout_lerobot_push_cube.py
 
 验证结果：descriptor 正确暴露 `observation.images.main` / `observation.state` 与 4 维动作；rollout 完整跑满 50 步、渲染 51 帧，链路正常。随机策略成功率低属预期（仅验证评估链路，非策略性能）。
 
+### 6.1 ACT 冒烟训练入口
+
+本仓库提供 wrapper + 配置，可直接用 LeRobot 的 ACT 策略对本数据集做训练（**在 `lerobot` 环境**，需先装 `accelerate`）：
+
+```bash
+python scripts/train_act_push_cube.py --config_path=configs/act_push_cube.yaml
+# 100 步 / batch 8 / CPU；step 50、100 触发闭环评估并生成视频
+# 一键脚本与踩坑记录见兄弟仓库 embodied-policy-zoo（scripts/train_act_push_cube.sh / docs/ACT_TRAINING_NOTES.md）
+```
+
+wrapper 会先 import `envs/lerobot_push_cube_env` 完成 `push_cube` 注册，再进入官方训练入口；
+`output_dir` 须不存在。冒烟实测 loss `1.78→0.53`（4.37 epoch），checkpoint 与评估视频正常产出。
+
 ---
 
 ## 7. 后续规划（第二周）
 
-- **对接 LeRobot 做模仿学习训练**：用本数据集训练行为克隆（BC）与 Diffusion Policy，输入 `(image, state)`、输出 4 维动作。
+- ~~对接 LeRobot 做模仿学习训练~~：ACT 冒烟训练已跑通（见 6.1）；后续扩量训练 BC / Diffusion Policy，输入 `(image, state)`、输出 4 维动作。
 - **闭环评测**：把训练策略接回 `PushCubeEnv`，用成功率 / 平均步数 / 回报评估，与专家基线对比。
 - **数据扩展**：增加立方体初始位姿随机性与多目标点，提升策略泛化；按需引入更丰富的相机视角。
 - **真实迁移预留**：接口与 LeRobot 对齐，后续可替换为真实机器人遥操作数据。
