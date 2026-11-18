@@ -1,0 +1,50 @@
+{
+  "checkpoint": "/data/wzh/robot/outputs/act_push_cube_full/checkpoints/004000",
+  "n_episodes": 30,
+  "n_failures": 21,
+  "success_rate": 0.3,
+  "type_counts": {
+    "T2_MISPUSH": 15,
+    "SUCCESS": 9,
+    "T4_OTHER": 5,
+    "T3_WEAK_PUSH": 1
+  },
+  "by_type": {
+    "T1_LOST": {
+      "count": 0,
+      "share_of_failures": 0.0
+    },
+    "T2_MISPUSH": {
+      "count": 15,
+      "share_of_failures": 0.7143,
+      "avg_final_dist": 0.1962,
+      "avg_displacement": 0.3056,
+      "avg_min_ee_cube": 0.0822,
+      "avg_y_error": 0.1213,
+      "avg_x_progress": 1.5184
+    },
+    "T3_WEAK_PUSH": {
+      "count": 1,
+      "share_of_failures": 0.0476,
+      "avg_final_dist": 0.0573,
+      "avg_displacement": 0.17,
+      "avg_min_ee_cube": 0.0822,
+      "avg_y_error": 0.0264,
+      "avg_x_progress": 0.763
+    },
+    "T4_OTHER": {
+      "count": 5,
+      "share_of_failures": 0.2381,
+      "avg_final_dist": 0.1627,
+      "avg_displacement": 0.3344,
+      "avg_min_ee_cube": 0.0839,
+      "avg_y_error": 0.0367,
+      "avg_x_progress": 1.7325
+    }
+  },
+  "per_seed_success_rate": {
+    "100": 0.5,
+    "200": 0.3,
+    "300": 0.1
+  }
+}

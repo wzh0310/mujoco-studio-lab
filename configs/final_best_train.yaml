@@ -1,0 +1,84 @@
+# 最终最优模型 (Day6): 基线超参 + 图像增强 + 完整 4000 步
+# 依据消融结论:
+#   - chunk20 / lr1e-5 是消融中最优 (缩短chunk/提高lr/闭环均下降)
+#   - 图像增强使距离误差 0.192->0.148 (短训明确正向)
+#   - 基线优势来自完整 4000 步训练量
+# 变化: 仅 dataset.image_transforms.enable=true, output_dir 新建
+output_dir: /data/wzh/robot/outputs/act_push_cube_final
+job_name: act_push_cube_final
+seed: 1000
+resume: false
+steps: 4000
+batch_size: 16
+num_workers: 4
+prefetch_factor: 4
+persistent_workers: true
+log_freq: 20
+save_freq: 800
+save_checkpoint: true
+eval_steps: 200
+max_eval_samples: 0
+env_eval_freq: 1000000000
+tf32: true
+cudnn_deterministic: false
+
+dataset:
+  repo_id: push_cube_expert
+  repo_type: dataset
+  root: /data/wzh/robot/mujoco-studio-lab/data/push_cube_demos
+  episodes: null
+  exclude_episodes: null
+  eval_split: 0.2
+  use_imagenet_stats: true
+  video_backend: pyav
+  revision: null
+  streaming: false
+  image_transforms:
+    enable: true
+    backend: dataloader
+    max_num_transforms: 3
+    random_order: false
+
+policy:
+  type: act
+  device: cuda
+  push_to_hub: false
+  repo_id: local/act_push_cube_final
+  n_obs_steps: 1
+  chunk_size: 20
+  n_action_steps: 20
+  vision_backbone: resnet18
+  dim_model: 128
+  n_heads: 8
+  dim_feedforward: 512
+  n_encoder_layers: 1
+  n_decoder_layers: 1
+  dropout: 0.1
+  use_vae: true
+  latent_dim: 8
+  n_vae_encoder_layers: 1
+  kl_weight: 1.0
+  optimizer_lr: 1e-5
+  optimizer_lr_backbone: 1e-5
+  optimizer_weight_decay: 1e-4
+  use_amp: false
+
+accelerator:
+  mixed_precision: "no"
+
+env:
+  type: push_cube
+  task: push_cube
+  fps: 50
+  episode_length: 50
+
+eval:
+  n_episodes: 1
+  batch_size: 1
+  use_async_envs: false
+  recording: false
+  max_episode_steps: 50
+
+trackio:
+  enable: false
+  project: lerobot

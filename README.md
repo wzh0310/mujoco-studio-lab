@@ -353,3 +353,17 @@ mujoco-studio-lab/
 - 完整报告见 `docs/DAY34_REPORT.md`。
 
 **版本**：`v0.3.0-full-training-eval`（第三/四周里程碑：全量 GPU 训练 + 标准化评估体系）。
+
+
+## Day 5-6：问题分析 + 针对性调优实验（v0.4.0）
+
+- **失败分析**（`scripts/analyze_failures.py`）：基线 30% 的 21 个失败中，95.2% 是「推偏/方向不准」，
+  EE 已接近立方体 8.3cm——感知/接近不是瓶颈。轨迹级根因：ACT 输出恒定满速 +x 推、不会侧修正/停止。
+- **14 组消融**（`scripts/ablation_pipeline.py`，结果 `data/ablation_results.json`）：
+  chunk 8/12/16（10%/16.7%/3.3%）、lr 1e-4/3e-4/5e-4（16.7%/26.7%/23.3%）、
+  temporal ensembling / 闭环重规划 nas1/4/10 全部 ≤ 基线 30%；图像增强使距离误差 0.192→0.148
+  但完整 4000 步训练后成功率反降至 13.3%。
+- **关键探针**：立方体初始偏移缩窄到 ±1cm 成功率仍 26.7% → 瓶颈是模型方向控制能力，非初始分布难度。
+- **结论**：30% 是当前数据规模(40条)+模型容量下的真实上限；70% 目标需质变（数据量级提升、
+  改进动作表征/闭环控制、更强策略），已列入 `docs/TUNING_REPORT.md` 后续方向。
+- 完整报告：`docs/FAILURE_ANALYSIS_REPORT.md`、`docs/TUNING_REPORT.md`；基线归档不变。

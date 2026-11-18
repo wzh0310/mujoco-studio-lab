@@ -149,6 +149,9 @@ def main():
     saved_videos = 0
     for seed in args.seeds:
         for ep in range(args.episodes_per_seed):
+            # reset policy internal state (temporal-ensembler queue) per episode
+            if hasattr(policy, "reset"):
+                policy.reset()
             rec = (saved_videos < args.record_success)
             metrics, frames = run_episode(
                 env, policy, pre, post, device,
