@@ -64,7 +64,8 @@ def stage_gen(episodes, select, seed, out):
         ep_imgs, ep_acts, ep_sts = [], [], []
         tgt = start_pos.copy()
         hold = 0
-        for step in range(cd.APPROACH_STEPS + cd.PUSH_STEPS_MAX + cd.HOLD_STEPS):
+        PUSH_STEPS = 34  # longer push budget for wide y-offset coverage
+        for step in range(cd.APPROACH_STEPS + PUSH_STEPS + cd.HOLD_STEPS):
             obs_t = obs
             if step < cd.APPROACH_STEPS:
                 goal = start_pos + (rear - start_pos) * fracs[step]
@@ -80,7 +81,7 @@ def stage_gen(episodes, select, seed, out):
                 else:
                     # targeted: drive dy from CUBE y error (strong lane alignment)
                     dy_err = TARGET_XY[1] - cube_xy[1]
-                    dy = float(np.clip(1.0 * dy_err, -0.006, 0.006))
+                    dy = float(np.clip(0.7 * dy_err, -0.005, 0.005))
                     # keep constant +x push (reliable full success); the SUCCESS_DIST
                     # hold below already demonstrates stopping, so no decel needed.
                     dx = float(np.clip(cd.STEP_MAX, 0.0,
