@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Day5: export & classify failure rollout trajectories of the baseline ACT policy.
+"""Export & classify failure rollout trajectories of the baseline ACT policy.
 
 Records per-step cube / EE trajectory for 3 seeds x 10 episodes using the exact
 same seed scheme as eval_act.py (seed*1000+ep), so failures are reproducible.

@@ -1,8 +1,8 @@
 # mujoco-studio-lab
 
-**第一周里程碑（v0.1.0-scene-ready）：Franka Panda 推方块任务的纯仿真验证环境 + LeRobot 格式专家演示数据。**
+**里程碑（v0.1.0-scene-ready）：Franka Panda 推方块任务的纯仿真验证环境 + LeRobot 格式专家演示数据。**
 
-> ⚠️ 定位：**纯算法验证仿真环境，不涉及底层控制**。机械臂由 MuJoCo 的 mocap + weld 约束驱动（内部求解 IK 与位置控制），我们只给末端目标位置；没有自写逆运动学、没有关节力矩控制、不调物理参数（摩擦/质量/阻尼均为默认量级）。第二周将在此环境上对接 LeRobot 做模仿学习训练。
+> ⚠️ 定位：**纯算法验证仿真环境，不涉及底层控制**。机械臂由 MuJoCo 的 mocap + weld 约束驱动（内部求解 IK 与位置控制），我们只给末端目标位置；没有自写逆运动学、没有关节力矩控制、不调物理参数（摩擦/质量/阻尼均为默认量级）。后续将在此环境上对接 LeRobot 做模仿学习训练。
 
 ---
 
@@ -26,7 +26,7 @@
 
 - **任务**：把边长 0.05 m 的橙色立方体，从桌面 `(0.62, -0.12)` 推到前方 0.2 m 处的半透明红色目标圆盘（中心 `(0.82, -0.12)`，半径 0.03 m 判定成功）。
 - **控制抽象**：末端由一个 mocap 体通过 weld 约束"焊接"到 Panda 的手，只需移动 mocap 目标点，MuJoCo 约束求解器自动完成 IK 与跟随——**我们不写控制器**。
-- **下游用途**：产出的 LeRobot v3 数据集是第二周模仿学习（BC / diffusion policy）训练的输入。
+- **下游用途**：产出的 LeRobot v3 数据集是下游模仿学习（BC / diffusion policy）训练的输入。
 
 仓库还保留了第一天的 WebViewer 串流 demo（见 [docs/env.md](docs/env.md)），以及从场景骨架到数据集的完整开发记录（[docs/](docs/)）。
 
@@ -232,7 +232,7 @@ python scripts/verify_dataset.py     # 打印 VERIFY DATASET OK，产出 assets/
 
 ## 6. 自定义环境接入 LeRobot（训练中自动评估）
 
-把第一周的 `PushCubeEnv` 封装为 LeRobot 兼容环境，可被原生加载用于 rollout / 训练中评估。
+把 `PushCubeEnv` 封装为 LeRobot 兼容环境，可被原生加载用于 rollout / 训练中评估。
 
 > **版本说明**：本项目 LeRobot 为 v0.7.0（2026 定制版）。该版本**没有 `BaseEnv` 基类**，环境本体是标准 `gymnasium.Env`；「注册表」实际是 `EnvConfig.register_subclass` + `gym.register`。实现按真实 API 落地。
 
@@ -280,7 +280,7 @@ AMP 在本容器 CPU 上实测慢 3.4×，故保持关闭；GPU 场景可用 `--
 
 ---
 
-## 7. 后续规划（第二周）
+## 7. 后续规划
 
 - ~~对接 LeRobot 做模仿学习训练~~：ACT 冒烟训练已跑通（见 6.1）；后续扩量训练 BC / Diffusion Policy，输入 `(image, state)`、输出 4 维动作。
 - **闭环评测**：把训练策略接回 `PushCubeEnv`，用成功率 / 平均步数 / 回报评估，与专家基线对比。
@@ -335,12 +335,12 @@ mujoco-studio-lab/
 - [docs/task.md](docs/task.md) — 交互物体、mocap 驱动、观测相机校准、Gym 接口、奖励
 - [docs/integration.md](docs/integration.md) — 全链路压测、Bug 修复、穿模调查与结论
 
-**版本**：`v0.2.0-lerobot-ready`（第二周里程碑：LeRobot 数据集 / 环境 / ACT 训练全链路就绪）。
-第一周里程碑为 `v0.1.0-scene-ready`。
+**版本**：`v0.2.0-lerobot-ready`（里程碑：LeRobot 数据集 / 环境 / ACT 训练全链路就绪）。
+里程碑为 `v0.1.0-scene-ready`。
 
 ---
 
-## Day 3–4：全量训练 + 标准化评估（v0.3.0）
+## 全量训练 + 标准化评估（v0.3.0）
 
 - **环境**：lerobot 环境 torch 重装为 2.6.0+cu124，解锁 RTX A6000（训练 ~28 step/s，比 CPU 快约 280×）。
 - **数据**：`scripts/collect_demos_v2.py` 扩充到 **40 条全成功演示**（立方体 + 机械臂起点双重随机偏移），
@@ -350,12 +350,12 @@ mujoco-studio-lab/
 - **评估**：`scripts/eval_act.py`，3 seeds × 10 = 30 次离屏评估；基线 **成功率 30%、平均完成步数 36.8、
   平均距离误差 0.134m**（成功回合 0.023m）。`scripts/record_dual_view.py` 生成双视角演示
   `assets/eval_dual_view.mp4`（左 global_cam + 右 top_cam）。
-- 完整报告见 `docs/DAY34_REPORT.md`。
+- 完整报告见 `docs/TRAINING_EVAL_REPORT.md`。
 
-**版本**：`v0.3.0-full-training-eval`（第三/四周里程碑：全量 GPU 训练 + 标准化评估体系）。
+**版本**：`v0.3.0-full-training-eval`（里程碑：全量 GPU 训练 + 标准化评估体系）。
 
 
-## Day 5-6：问题分析 + 针对性调优实验（v0.4.0）
+## 问题分析 + 针对性调优实验（v0.4.0）
 
 - **失败分析**（`scripts/analyze_failures.py`）：基线 30% 的 21 个失败中，95.2% 是「推偏/方向不准」，
   EE 已接近立方体 8.3cm——感知/接近不是瓶颈。轨迹级根因：ACT 输出恒定满速 +x 推、不会侧修正/停止。

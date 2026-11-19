@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Day5/Day6 ablation pipeline: generate config variants, train, evaluate, summarize.
+"""Ablation pipeline: generate config variants, train, evaluate, summarize.
 
 Runs INSIDE the container (lerobot env). Each experiment:
   1) load base yaml (configs/act_full_train.yaml), override selected fields
@@ -32,20 +32,20 @@ OUTPUTS = "/data/wzh/robot/outputs"
 # ---- experiment definitions: name -> dict of overrides -----------------------
 # structure mirrors the nested yaml; we do a deep-merge onto the base config.
 EXPERIMENTS = {
-    # ---- Day5 quick ablations (low cost) ----
+    # ---- quick ablations (low cost) ----
     "base_s": {},   # short-training baseline (chunk20 / lr1e-5 / no aug) as control
     "chunk10": {"policy": {"chunk_size": 10, "n_action_steps": 10}},
     "augment": {"dataset": {"image_transforms": {"enable": True, "backend": "dataloader",
                                                  "max_num_transforms": 3}}},
-    # ---- Day6 chunk length ----
+    # ---- chunk length ----
     "chunk8": {"policy": {"chunk_size": 8, "n_action_steps": 8}},
     "chunk12": {"policy": {"chunk_size": 12, "n_action_steps": 12}},
     "chunk16": {"policy": {"chunk_size": 16, "n_action_steps": 16}},
-    # ---- Day6 learning rate ----
+    # ---- learning rate ----
     "lr1e4": {"policy": {"optimizer_lr": 1e-4, "optimizer_lr_backbone": 1e-4}},
     "lr3e4": {"policy": {"optimizer_lr": 3e-4, "optimizer_lr_backbone": 3e-4}},
     "lr5e4": {"policy": {"optimizer_lr": 5e-4, "optimizer_lr_backbone": 5e-4}},
-    # ---- Day6 action smoothing (temporal ensembling as ACT-equivalent) ----
+    # ---- action smoothing (temporal ensembling as ACT-equivalent) ----
     "smooth": {"policy": {"temporal_ensemble_coeff": 0.01, "n_action_steps": 1,
                           "chunk_size": 20}},
     # ---- KEY: closed-loop inference (re-plan every K steps instead of 20) ----

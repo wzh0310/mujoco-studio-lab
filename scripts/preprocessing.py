@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Canonical preprocessing rules for the push_cube LeRobot dataset (Day-3).
+"""Canonical preprocessing rules for the push_cube LeRobot dataset.
 
 This module is the SINGLE SOURCE OF TRUTH for observation/action normalization.
 Both the ACT training pipeline (via LeRobot's stats-derived processor) and the

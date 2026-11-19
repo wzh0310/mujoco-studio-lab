@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Record a dual-view (third-person global + first-person task camera) MP4 of a
-successful ACT rollout on push_cube (Day-4 deliverable).
+successful ACT rollout on push_cube (deliverable).
 
 Left panel  = global_cam  (third-person overview of the whole scene)
 Right panel = top_cam     (first-person task observation fed to the policy)

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""Enhanced expert demo generation for push_cube (Day-3 full dataset).
+"""Enhanced expert demo generation for push_cube (full dataset).
 
 Compared with collect_demos.py, this generator:
   * randomizes BOTH the cube initial position and the arm (mocap) start pose

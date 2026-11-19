@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Automated ACT evaluation for push_cube (Day-4).
+"""Automated ACT evaluation for push_cube.
 
 Protocol (task spec):
   * 3 fixed seeds x 10 episodes = 30 rollouts.

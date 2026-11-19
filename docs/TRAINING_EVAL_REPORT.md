@@ -1,4 +1,4 @@
-# Day 3–4：全量数据训练 + 标准化评估体系
+# 全量数据训练 + 标准化评估体系
 
 本轮完成「全量数据正式训练」与「评估体系搭建 + 基线量化指标输出」。所有产出在容器
 `wzh-ai` 内，涉及 `mujoco-studio-lab`（数据/环境/评估）与 `embodied-policy-zoo`（训练配置）两仓。
@@ -13,7 +13,7 @@ torch 2.15.0+cu132，与驱动不匹配，`torch.cuda.is_available()=False`。
 已将 dist-info 元数据下限对齐到 2.6.0 消除 `pip check` 冲突（仅元数据，不改代码）。
 训练速度从 CPU 的 0.1 step/s 提升到 **~28 step/s（约 280×）**。
 
-## Day 3：数据扩充 + 预处理固化 + 正式训练
+## 数据扩充 + 预处理固化 + 正式训练
 
 ### 1. 数据扩充与标准化
 - `scripts/collect_demos_v2.py`：在立方体初始位置（±0.03m）之外，新增机械臂 mocap
@@ -38,7 +38,7 @@ torch 2.15.0+cu132，与驱动不匹配，`torch.cuda.is_available()=False`。
   **0.281 → 0.144**（step200→4000），后期趋平，无过拟合。
 - checkpoint：`outputs/act_push_cube_full/checkpoints/{000800,001600,002400,003200,004000,last}`。
 
-## Day 4：评估体系 + 基线指标 + 演示视频
+## 评估体系 + 基线指标 + 演示视频
 
 ### 1. 评估脚本 `scripts/eval_act.py`
 - 固定 **3 组种子 × 10 回合 = 30 次**（离屏 `MUJOCO_GL=egl`）。

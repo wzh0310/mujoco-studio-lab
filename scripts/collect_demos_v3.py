@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""Targeted expert demos (Day6) addressing the 95% 'push-sideways / overshoot' failures.
+"""Targeted expert demos addressing the 95% 'push-sideways / overshoot' failures.
 
 Differences vs collect_demos_v2:
   * WIDER cube initial y offset (+-0.055 vs +-0.035) -> covers off-lane starts.
@@ -10,7 +10,7 @@ Differences vs collect_demos_v2:
     a constant full-speed +x push -> demonstrates deceleration / stopping, removing
     the overshoot seen in baselines (avg x-progress 1.52).
 
-Only SUCCESSFUL (dist < 0.03) trajectories are selected, matching Day3 policy.
+Only SUCCESSFUL (dist < 0.03) trajectories are selected, matching baseline policy.
 Stages (gen in mujoco env; export/verify in lerobot env):
   python scripts/collect_demos_v3.py gen  --episodes 120 --select 55
   python scripts/collect_demos_v3.py export --raw data/raw_demos_v3.npz --out data/push_cube_demos_v3

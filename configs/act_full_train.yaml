@@ -1,4 +1,4 @@
-# ACT 全量数据正式训练配置 (Day-3) —— push_cube, GPU (RTX A6000)
+# ACT 全量数据正式训练配置 —— push_cube, GPU (RTX A6000)
 #
 # 数据集: data/push_cube_demos (40 episodes / 1616 frames, 8:2 split)
 # 环境:   push_cube (LeRobot native registration)

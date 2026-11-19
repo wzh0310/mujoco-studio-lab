@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """LeRobot-compatible environment wrapper for the push-cube task.
 
-This module turns the week-1 Gymnasium :class:`PushCubeEnv` into an environment
+This module turns the Gymnasium :class:`PushCubeEnv` into an environment
 that LeRobot ``v0.7.0`` can load *natively* for in-training evaluation.
 
 What "LeRobot compatible" means in v0.7.0 (verified from source, 2026 build):
