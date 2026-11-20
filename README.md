@@ -1,6 +1,6 @@
 # mujoco-studio-lab
 
-**里程碑（v0.1.0-scene-ready）：Franka Panda 推方块任务的纯仿真验证环境 + LeRobot 格式专家演示数据。**
+**里程碑（v0.0.1-scene-ready）：Franka Panda 推方块任务的纯仿真验证环境 + LeRobot 格式专家演示数据。**
 
 > ⚠️ 定位：**纯算法验证仿真环境，不涉及底层控制**。机械臂由 MuJoCo 的 mocap + weld 约束驱动（内部求解 IK 与位置控制），我们只给末端目标位置；没有自写逆运动学、没有关节力矩控制、不调物理参数（摩擦/质量/阻尼均为默认量级）。后续将在此环境上对接 LeRobot 做模仿学习训练。
 
@@ -367,12 +367,12 @@ mujoco-studio-lab/
 - [docs/task.md](docs/task.md) — 交互物体、mocap 驱动、观测相机校准、Gym 接口、奖励
 - [docs/integration.md](docs/integration.md) — 全链路压测、Bug 修复、穿模调查与结论
 
-**版本**：`v0.2.0-lerobot-ready`（里程碑：LeRobot 数据集 / 环境 / ACT 训练全链路就绪）。
-里程碑为 `v0.1.0-scene-ready`。
+**版本**：`v0.0.2-lerobot-ready`（里程碑：LeRobot 数据集 / 环境 / ACT 训练全链路就绪）。
+里程碑为 `v0.0.1-scene-ready`。
 
 ---
 
-## 全量训练 + 标准化评估（v0.3.0）
+## 全量训练 + 标准化评估（v0.0.3）
 
 - **环境**：lerobot 环境 torch 重装为 2.6.0+cu124，解锁 RTX A6000（训练 ~28 step/s，比 CPU 快约 280×）。
 - **数据**：`scripts/collect_demos_v2.py` 扩充到 **40 条全成功演示**（立方体 + 机械臂起点双重随机偏移），
@@ -384,10 +384,10 @@ mujoco-studio-lab/
   `assets/eval_dual_view.mp4`（左 global_cam + 右 top_cam）。
 - 完整报告见 `docs/TRAINING_EVAL_REPORT.md`。
 
-**版本**：`v0.3.0-full-training-eval`（里程碑：全量 GPU 训练 + 标准化评估体系）。
+**版本**：`v0.0.3-full-training-eval`（里程碑：全量 GPU 训练 + 标准化评估体系）。
 
 
-## 问题分析 + 针对性调优实验（v0.4.0）
+## 问题分析 + 针对性调优实验（v0.0.4）
 
 - **失败分析**（`scripts/analyze_failures.py`）：基线 30% 的 21 个失败中，95.2% 是「推偏/方向不准」，
   EE 已接近立方体 8.3cm——感知/接近不是瓶颈。轨迹级根因：ACT 输出恒定满速 +x 推、不会侧修正/停止。
