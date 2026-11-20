@@ -4,3 +4,6 @@ __pycache__/
 *.log
 data/raw_demos.npz
 MUJOCO_LOG.TXT
+
+# 可编辑安装生成物
+*.egg-info/

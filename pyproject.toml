@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pushcube-envs"
+version = "0.0.5"
+description = "Standardized Gymnasium PushCube environment for embodied imitation learning"
+requires-python = ">=3.10"
+dependencies = [
+    "gymnasium>=0.29",
+    "numpy",
+    "mujoco>=2.3",
+]
+
+[tool.setuptools]
+# The source lives in ./envs but is published as the import package
+# ``pushcube_envs`` so it never collides with other repos' generic ``envs`` dir.
+package-dir = { "pushcube_envs" = "envs" }
+packages = ["pushcube_envs"]
+
+# Gymnasium plugin discovery: after `pip install -e`, gym.make("PushCube-v0")
+# resolves the env without requiring a manual import first.
+[project.entry-points."gymnasium.envs"]
+PushCube-v0 = "pushcube_envs:PushCubeEnv"

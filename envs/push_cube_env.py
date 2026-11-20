@@ -3,12 +3,16 @@
 
 Standard Env interface on top of `assets/scenes/push_cube.xml`:
 
-- **Observation** (`spaces.Dict`):
-  - `image`: Box(224, 224, 3) uint8, fixed `top_cam` RGB view (core obs)
-  - `state`: Box(13,) float32 -- arm joint angles (7) + cube pos (3) + target pos (3)
+- **Observation** (controlled by ``obs_mode``):
+  - ``obs_mode="both"`` (default, backward compatible): a ``spaces.Dict`` with
+    - `image`: Box(224, 224, 3) uint8, fixed `top_cam` RGB view
+    - `state`: Box(13,) float32 -- arm joint angles (7) + cube pos (3) + target pos (3)
+  - ``obs_mode="image"``: only the RGB image (Box(224, 224, 3) uint8)
+  - ``obs_mode="state"``: only the low-dimensional state (Box(13,) float32)
 - **Action**: Box(4,) -- `[dx, dy, dz, gripper]` per-step increments.
-  `a[:3]` is added to the mocap body target (clamped to a reachable workspace
-  box); no joint torques are touched. `a[3]` is the gripper (0..1, reserved).
+  `a[:3]` is the EE Cartesian increment, bounded to +/- 0.02 m per axis so
+  exploration stays meaningful; `a[3]` is the binary gripper flag in [0, 1]
+  (reserved, kept closed for pushing). No joint torques are touched.
 - **Reward** (dense guidance + sparse final):
   - dense 1: distance-reduction shaping  `-(dist_t - dist_{t-1}) * K_DIST`
   - dense 2: EE-to-cube proximity        `-||ee - cube|| * K_EE`  (weak guidance)
@@ -16,11 +20,19 @@ Standard Env interface on top of `assets/scenes/push_cube.xml`:
   - sparse:  cube centre within 0.03 m of target  -> `+10`, episode success
 - **Termination**: success (cube on target) or failure (cube fell off the table).
 - **Truncation**: `max_episode_steps` (default 50).
+- **Rendering**: `render_mode="rgb_array"` returns the RGB frame from
+  ``render_camera`` (default `top_cam`); `render_mode="human"` uses the
+  `global_cam` third-person view and displays via PIL when a display is
+  available (headless-safe: returns None and warns otherwise).
 
-Example:
+Example::
     env = PushCubeEnv()
     obs, info = env.reset(seed=0)
     obs, r, term, trunc, info = env.step(env.action_space.sample())
+
+    # low-dimensional ablation
+    env = PushCubeEnv(obs_mode="state")
+    obs, info = env.reset(seed=0)       # obs is a (13,) float32 array
 """
 import os
 
@@ -61,20 +73,43 @@ STATE_LOW = np.array([-3.0] * 7 + [0.3, -0.4, 0.70] + [0.3, -0.4, 0.70],
 STATE_HIGH = np.array([3.0] * 7 + [1.3, 0.4, 0.90] + [1.3, 0.4, 0.90],
                       dtype=np.float32)
 
+# Action bounds: +/- 2 cm Cartesian EE increment, binary gripper flag in [0, 1].
+ACTION_LOW = np.array([-0.02, -0.02, -0.02, 0.0], dtype=np.float32)
+ACTION_HIGH = np.array([0.02, 0.02, 0.02, 1.0], dtype=np.float32)
+
+OBS_MODES = ('both', 'image', 'state')
+RENDER_MODES = (None, 'rgb_array', 'human')
+
 
 class PushCubeEnv(gym.Env):
     """Push the 0.1kg cube from its start position onto the red target disc."""
 
-    metadata = {'render_modes': ['rgb_array'], 'render_fps': 50}
+    metadata = {
+        'render_modes': ['rgb_array', 'human'],
+        'render_fps': 50,
+    }
 
     def __init__(self, xml_path=DEFAULT_XML, frame_skip=10, image_obs=True,
-                 max_episode_steps=50, render_mode=None):
+                 max_episode_steps=50, render_mode=None,
+                 obs_mode=None, render_camera=None):
         super().__init__()
+        # ``obs_mode`` is the new canonical switch.  Fall back to the legacy
+        # ``image_obs`` flag when unset so all existing callers keep working.
+        if obs_mode is None:
+            obs_mode = 'both' if image_obs else 'state'
+        if obs_mode not in OBS_MODES:
+            raise ValueError(f"obs_mode must be one of {OBS_MODES}, got {obs_mode!r}")
+        if render_mode not in RENDER_MODES:
+            raise ValueError(
+                f"render_mode must be one of {RENDER_MODES}, got {render_mode!r}")
+
         self.xml_path = os.path.abspath(xml_path)
         self.frame_skip = int(frame_skip)
         self.max_episode_steps = int(max_episode_steps)
-        self.image_obs = bool(image_obs)
+        self.obs_mode = obs_mode
+        self.image_obs = bool(image_obs)      # legacy alias, kept for compatibility
         self.render_mode = render_mode
+        self.render_camera = render_camera
 
         self.model = mujoco.MjModel.from_xml_path(self.xml_path)
         self.data = mujoco.MjData(self.model)
@@ -86,36 +121,41 @@ class PushCubeEnv(gym.Env):
                                             'hand')
         self._prev_dist = None
         self._steps = 0
+        self._rendered_once = False
 
+        # A renderer is needed for image/both observations or for any render_mode.
         self._renderer = None
-        if self.image_obs:
+        need_renderer = self.obs_mode in ('both', 'image') or render_mode is not None
+        if need_renderer:
             try:
                 self._renderer = mujoco.Renderer(self.model, height=IMG_SIZE,
                                                  width=IMG_SIZE)
             except Exception as e:                 # headless without EGL etc.
                 import warnings
-                warnings.warn(f'image observation disabled '
-                              f'(renderer init failed: {e})')
-                self._renderer = None
+                warnings.warn(f'offscreen renderer unavailable ({e}); '
+                              f'image observations will be zeros')
 
-        # spaces
+        # spaces --------------------------------------------------------------
         self.action_space = spaces.Box(
-            low=np.array([-0.02, -0.02, -0.02, 0.0], dtype=np.float32),
-            high=np.array([0.02, 0.02, 0.02, 1.0], dtype=np.float32),
-            dtype=np.float32)
-        self.observation_space = spaces.Dict({
-            'image': spaces.Box(low=0, high=255, shape=(IMG_SIZE, IMG_SIZE, 3),
-                                dtype=np.uint8) if self._renderer else
-                     spaces.Box(low=0, high=0, shape=(1,), dtype=np.uint8),
-            'state': spaces.Box(low=STATE_LOW, high=STATE_HIGH,
-                                dtype=np.float32),
-        })
+            low=ACTION_LOW, high=ACTION_HIGH, dtype=np.float32)
+        self.observation_space = self._make_observation_space()
+
+    def _make_observation_space(self):
+        image_space = (spaces.Box(low=0, high=255, shape=(IMG_SIZE, IMG_SIZE, 3),
+                                  dtype=np.uint8) if self._renderer else
+                       spaces.Box(low=0, high=0, shape=(1,), dtype=np.uint8))
+        state_space = spaces.Box(low=STATE_LOW, high=STATE_HIGH, dtype=np.float32)
+        if self.obs_mode == 'image':
+            return image_space
+        if self.obs_mode == 'state':
+            return state_space
+        return spaces.Dict({'image': image_space, 'state': state_space})
 
     # ------------------------------------------------------------------ helpers
-    def _get_image(self):
+    def _get_image(self, camera=None):
         if self._renderer is None:
             return np.zeros((1,), dtype=np.uint8)
-        self._renderer.update_scene(self.data, camera='top_cam')
+        self._renderer.update_scene(self.data, camera=camera or 'top_cam')
         return self._renderer.render()          # uint8 RGB, (224, 224, 3)
 
     def _get_state(self):
@@ -126,6 +166,10 @@ class PushCubeEnv(gym.Env):
         ]).astype(np.float32)
 
     def _get_obs(self):
+        if self.obs_mode == 'image':
+            return self._get_image()
+        if self.obs_mode == 'state':
+            return self._get_state()
         return {'image': self._get_image(), 'state': self._get_state()}
 
     def _cube_target_dist(self):
@@ -183,6 +227,12 @@ class PushCubeEnv(gym.Env):
         return float(reward), comps, terminated
 
     # ------------------------------------------------------------------ gym API
+    def seed(self, seed=None):
+        """Explicit seed setter (Gymnasium also accepts ``reset(seed=...)``)."""
+        if seed is not None:
+            self._np_random, self._np_random_seed = gym.utils.seeding.np_random(seed)
+        return [getattr(self, '_np_random_seed', None)]
+
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
         mujoco.mj_resetDataKeyframe(self.model, self.data, self._home_key)
@@ -202,7 +252,7 @@ class PushCubeEnv(gym.Env):
         # per-step EE increment on the mocap target (weld constraint does the rest)
         target = self.data.mocap_pos[0] + action[:3]
         self.data.mocap_pos[0] = np.clip(target, MOCAP_LOW, MOCAP_HIGH)
-        # action[3] = gripper 0..1: interface reserved, kept closed for pushing
+        # action[3] = binary gripper flag 0..1: interface reserved, kept closed
 
         for _ in range(self.frame_skip):
             mujoco.mj_step(self.model, self.data)
@@ -221,7 +271,32 @@ class PushCubeEnv(gym.Env):
         return self._get_obs(), reward, terminated, truncated, info
 
     def render(self):
-        return self._get_image()
+        """Render according to ``render_mode``.
+
+        - rgb_array: RGB ndarray (224, 224, 3) from ``render_camera``/top_cam.
+        - human: third-person global_cam shown via PIL when a display exists;
+          on headless servers this is a safe no-op (returns None).
+        """
+        if self.render_mode is None:
+            return None
+        if self.render_mode == 'rgb_array':
+            return self._get_image(self.render_camera)
+        # human mode: prefer the third-person camera
+        cam = self.render_camera or 'global_cam'
+        img = self._get_image(cam)
+        if self._renderer is None or img.ndim != 3:
+            gym.logger.warn('human rendering unavailable (no renderer); '
+                            'set render_mode="rgb_array" on headless hosts')
+            return None
+        try:
+            from PIL import Image
+            Image.fromarray(img).show()
+        except Exception as e:
+            if not self._rendered_once:
+                gym.logger.warn(f'human display unavailable ({e}); '
+                                f'use render_mode="rgb_array" headlessly')
+        self._rendered_once = True
+        return None
 
     def close(self):
         if self._renderer is not None:

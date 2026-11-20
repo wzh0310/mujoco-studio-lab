@@ -105,6 +105,36 @@ PY
 
 预期：`image=(224,224,3) uint8`、`state=(13,) float32`，50 步内无报错。
 
+### 步骤 2b：标准化注册与观测切换（推荐）
+
+环境已注册到 Gymnasium 全局表，可编辑安装后一行创建：
+
+```bash
+pip install -e .            # 把本仓库 envs/ 装为 pushcube_envs（两仓解耦）
+python - <<'PY'
+import gymnasium as gym
+import pushcube_envs         # 触发 PushCube-v0 注册
+env = gym.make("PushCube-v0")
+obs, info = env.reset(seed=0)
+env.close()
+PY
+```
+
+`obs_mode` 三种观测模式按需切换（默认 `both` 保持训练链路不变）：
+
+| `obs_mode` | 返回观测 | 用途 |
+| --- | --- | --- |
+| `both`（默认） | `Dict{image,state}` | LeRobot 训练 / 评估（兼容既有链路） |
+| `image` | `(224,224,3) uint8` | 纯视觉消融 |
+| `state` | `(13,) float32` | 低维状态消融 / 快速调试 |
+
+`render_mode` 支持 `rgb_array`（返回 RGB 帧）与 `human`（有显示器时弹出 PIL 窗口，
+无头服务器安全降级为 no-op）。`seed()` 显式可复现。验收脚本：
+
+```bash
+python scripts/verify_standard_env.py   # 打印 ALL STANDARD ENV CHECKS PASSED
+```
+
 ### 步骤 3：数据采集（生成专家演示 → 导出 LeRobot）
 
 ```bash
@@ -137,12 +167,14 @@ python scripts/record_expert_video.py
 
 ## 4. 接口说明
 
-### 4.1 观测空间 `observation_space`（`spaces.Dict`）
+### 4.1 观测空间 `observation_space`（由 `obs_mode` 决定，默认 `spaces.Dict`）
 
 | 键 | 类型 / 形状 | 说明 |
 | --- | --- | --- |
 | `image` | `Box(0,255,(224,224,3),uint8)` | 固定相机 `top_cam` 的 RGB 观测（正下方俯视，fovy=50°，完整覆盖末端+立方体+目标），核心视觉输入 |
 | `state` | `Box(13,),float32` | `[7 个臂关节角] + [cube_x,cube_y,cube_z] + [target_x,target_y,target_z]` |
+
+> `obs_mode="image"` 时观测仅含 `image` 键；`obs_mode="state"` 时观测直接为 `(13,)` 数组。
 
 ### 4.2 动作空间 `action_space`（`Box(4,),float32`）
 
