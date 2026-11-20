@@ -41,6 +41,8 @@ import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
 
+from .offscreen_render import OffscreenRenderer, PRESETS
+
 DEFAULT_XML = os.path.join(os.path.dirname(__file__), '..', 'assets', 'scenes',
                            'push_cube.xml')
 
@@ -77,7 +79,7 @@ STATE_HIGH = np.array([3.0] * 7 + [1.3, 0.4, 0.90] + [1.3, 0.4, 0.90],
 ACTION_LOW = np.array([-0.02, -0.02, -0.02, 0.0], dtype=np.float32)
 ACTION_HIGH = np.array([0.02, 0.02, 0.02, 1.0], dtype=np.float32)
 
-OBS_MODES = ('both', 'image', 'state')
+OBS_MODES = ('both', 'image', 'state', 'rgb')
 RENDER_MODES = (None, 'rgb_array', 'human')
 
 
@@ -91,7 +93,8 @@ class PushCubeEnv(gym.Env):
 
     def __init__(self, xml_path=DEFAULT_XML, frame_skip=10, image_obs=True,
                  max_episode_steps=50, render_mode=None,
-                 obs_mode=None, render_camera=None):
+                 obs_mode=None, render_camera=None,
+                 randomize_start=False, start_xy_range=0.03, rgb_preset='train'):
         super().__init__()
         # ``obs_mode`` is the new canonical switch.  Fall back to the legacy
         # ``image_obs`` flag when unset so all existing callers keep working.
@@ -110,6 +113,10 @@ class PushCubeEnv(gym.Env):
         self.image_obs = bool(image_obs)      # legacy alias, kept for compatibility
         self.render_mode = render_mode
         self.render_camera = render_camera
+        self.randomize_start = bool(randomize_start)
+        self.start_xy_range = float(start_xy_range)
+        self.rgb_preset = rgb_preset if rgb_preset in PRESETS else 'train'
+        self._cube_start_xy = np.array([0.62, -0.12], dtype=np.float64)
 
         self.model = mujoco.MjModel.from_xml_path(self.xml_path)
         self.data = mujoco.MjData(self.model)
@@ -135,6 +142,17 @@ class PushCubeEnv(gym.Env):
                 warnings.warn(f'offscreen renderer unavailable ({e}); '
                               f'image observations will be zeros')
 
+        self._offscreen = None
+        if self.obs_mode == 'rgb' or render_mode is not None:
+            try:
+                self._offscreen = OffscreenRenderer(
+                    self.model, self.data, self._cube_body, self._hand_body)
+            except Exception as e:
+                import warnings
+                warnings.warn(f'offscreen renderer unavailable ({e}); '
+                              f'rgb observations will be zeros')
+        self._rgb_cache = None
+
         # spaces --------------------------------------------------------------
         self.action_space = spaces.Box(
             low=ACTION_LOW, high=ACTION_HIGH, dtype=np.float32)
@@ -145,6 +163,10 @@ class PushCubeEnv(gym.Env):
                                   dtype=np.uint8) if self._renderer else
                        spaces.Box(low=0, high=0, shape=(1,), dtype=np.uint8))
         state_space = spaces.Box(low=STATE_LOW, high=STATE_HIGH, dtype=np.float32)
+        if self.obs_mode == 'rgb':
+            h, w, gray = PRESETS[self.rgb_preset]
+            ch = 1 if gray else 3
+            return spaces.Box(low=0.0, high=1.0, shape=(ch, h, w), dtype=np.float32)
         if self.obs_mode == 'image':
             return image_space
         if self.obs_mode == 'state':
@@ -165,7 +187,27 @@ class PushCubeEnv(gym.Env):
             np.array([TARGET_XY[0], TARGET_XY[1], 0.752]),  # target position
         ]).astype(np.float32)
 
+    def _get_rgb(self):
+        if self._rgb_cache is None:
+            if self._offscreen is None:
+                h, w, gray = PRESETS[self.rgb_preset]
+                ch = 1 if gray else 3
+                self._rgb_cache = np.zeros((ch, h, w), dtype=np.float32)
+            else:
+                self._rgb_cache = self._offscreen.get_rgb_image(preset=self.rgb_preset)
+        return self._rgb_cache
+
+    def get_rgb_image(self, preset=None, camera='top_cam', chw=True, normalize=True):
+        """Offscreen capture: 'train' (84x84 gray) / 'demo' (224x224 RGB).
+        Returns CHW float32 [0,1] (SB3 CNN convention) by default."""
+        if self._offscreen is None:
+            raise RuntimeError('offscreen renderer unavailable in this env')
+        return self._offscreen.get_rgb_image(
+            preset=preset or self.rgb_preset, camera=camera, chw=chw, normalize=normalize)
+
     def _get_obs(self):
+        if self.obs_mode == 'rgb':
+            return self._get_rgb()
         if self.obs_mode == 'image':
             return self._get_image()
         if self.obs_mode == 'state':
@@ -238,12 +280,23 @@ class PushCubeEnv(gym.Env):
         mujoco.mj_resetDataKeyframe(self.model, self.data, self._home_key)
         self.data.mocap_pos[0] = HOME_POS
         self.data.mocap_quat[0] = HOME_QUAT
+        if self.randomize_start:
+            dx = self.np_random.uniform(-self.start_xy_range, self.start_xy_range)
+            dy = self.np_random.uniform(-self.start_xy_range, self.start_xy_range)
+            cq = self._cube_start_xy + np.array([dx, dy])
+            qadr = self.model.jnt_qposadr[
+                mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, 'cube_free')]
+            cube_z = self.data.qpos[qadr + 2]
+            self.data.qpos[qadr:qadr + 3] = [cq[0], cq[1], cube_z]
+            self.data.qpos[qadr + 3:qadr + 7] = [1, 0, 0, 0]
         mujoco.mj_forward(self.model, self.data)
+        self._rgb_cache = None
         self._steps = 0
         self._prev_dist = self._cube_target_dist()
         obs = self._get_obs()
         info = {'cube_target_dist': self._prev_dist, 'success': False,
-                'fell_off': False}
+                'fell_off': False,
+                'cube_start_xy': self.data.xpos[self._cube_body][:2].copy()}
         return obs, info
 
     def step(self, action):
@@ -260,6 +313,7 @@ class PushCubeEnv(gym.Env):
 
         reward, comps, terminated = self._compute_reward()
         self._prev_dist = comps['cube_target_dist']
+        self._rgb_cache = None
         truncated = bool(self._steps >= self.max_episode_steps and not terminated)
         success = comps['cube_target_dist'] < SUCCESS_RADIUS
         info = dict(comps)
@@ -299,6 +353,9 @@ class PushCubeEnv(gym.Env):
         return None
 
     def close(self):
+        if self._offscreen is not None:
+            self._offscreen.close()
+            self._offscreen = None
         if self._renderer is not None:
             self._renderer.close()
             self._renderer = None

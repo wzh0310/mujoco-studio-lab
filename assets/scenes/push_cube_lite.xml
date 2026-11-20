@@ -1,0 +1,34 @@
+<mujoco model="push_cube_lite_render">
+  <!-- Lightweight GEOMETRY PROXY of push_cube.xml for fast offscreen capture.
+       Physics is still simulated with the full Panda scene; this model is used
+       ONLY by OffscreenRenderer for the 84x84 training-grade image. The cube
+       free-joint pose and the hand (mocap) pose are synced from the real data
+       every frame, so the image stays geometrically aligned with the task. -->
+  <visual>
+    <headlight diffuse="0.6 0.6 0.6" ambient="0.30 0.30 0.30" specular="0.05 0.05 0.05"/>
+  </visual>
+  <asset>
+    <material name="table_top_mat" rgba="0.58 0.40 0.24 1"/>
+    <material name="cube_mat" rgba="0.95 0.42 0.16 1"/>
+    <material name="target_mat" rgba="0.95 0.12 0.15 0.55"/>
+    <material name="hand_mat" rgba="0.25 0.45 0.75 1"/>
+  </asset>
+  <worldbody>
+    <light pos="0.5 -0.6 2.6" dir="-0.1 0.15 -1" directional="true" diffuse="0.85 0.85 0.82"/>
+    <geom name="table_top" type="box" pos="0.85 0 0.735" size="0.4 0.3 0.015" material="table_top_mat"/>
+    <body name="cube" pos="0.62 -0.12 0.775">
+      <freejoint name="cube_free"/>
+      <geom name="cube_geom" type="box" size="0.025 0.025 0.025" material="cube_mat"/>
+    </body>
+    <body name="target" pos="0.82 -0.12 0.752">
+      <geom name="target_disc" type="cylinder" size="0.06 0.002" material="target_mat"
+            contype="0" conaffinity="0"/>
+    </body>
+    <!-- EE proxy driven by mocap_pos (synced from real hand xpos). -->
+    <body name="hand" mocap="true" pos="0.088 0 0.926">
+      <geom name="hand_geom" type="box" size="0.035 0.045 0.03" material="hand_mat"
+            contype="0" conaffinity="0"/>
+    </body>
+    <camera name="top_cam" pos="0.65 -0.10 1.75" xyaxes="1 0 0 0 1 0" fovy="50"/>
+  </worldbody>
+</mujoco>
